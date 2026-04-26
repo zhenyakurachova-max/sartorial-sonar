@@ -1,16 +1,41 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { Link } from "react-router-dom";
+import { BrandMark } from "@/components/BrandMark";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const Index = () => {
+  const { session } = useAuth();
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <main className="min-h-screen bg-background flex flex-col">
+      <header className="px-6 pt-8">
+        <BrandMark />
+      </header>
+
+      <section className="flex-1 px-6 pt-16 pb-12 max-w-md mx-auto w-full">
+        <h1 className="font-serif text-4xl leading-tight text-balance">
+          An honest look at what's in your wardrobe.
+        </h1>
+        <p className="mt-6 text-base text-muted-foreground text-pretty">
+          Photograph every piece. Get a verdict on each one — keep, dump, or gap. Then a shopping
+          list of what's actually missing.
+        </p>
+
+        <div className="mt-10 flex flex-col gap-3">
+          <Button asChild size="lg" className="rounded-sm">
+            <Link to={session ? "/app/interview" : "/signup"}>
+              {session ? "Continue" : "Begin"}
+            </Link>
+          </Button>
+          {!session && (
+            <p className="text-xs text-muted-foreground text-center">
+              Free to start. No card needed.
+            </p>
+          )}
+        </div>
+      </section>
+    </main>
   );
 };
-
-const Index = PlaceholderIndex;
 
 export default Index;
