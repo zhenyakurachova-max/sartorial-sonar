@@ -1,5 +1,5 @@
 // Question definitions for the interview flow.
-// Q1–Q3 are fixed and structured. Q4–Q10 are adaptive (Claude) with a fallback bank.
+// Q1–Q3 are fixed and structured. Q4–Q10 are fixed open-text prompts.
 
 export type ChoiceQuestion = {
   kind: "choice";
@@ -67,14 +67,12 @@ export const FIXED_QUESTIONS: Question[] = [
   },
 ];
 
-// Pre-written fallback questions used if the AI call fails.
-// Indexed by question_index (4..10 i.e. positions 3..9 zero-indexed).
-export const FALLBACK_QUESTIONS: string[] = [
-  "Which colours do you actually reach for — and which ones never make it out of the wardrobe?",
-  "Name a person whose style you'd quietly steal from. What is it about how they dress?",
-  "What's an absolute no for you — a silhouette, fabric, or trend you'll never wear?",
-  "When you dress up, what's the occasion — and what do you reach for?",
-  "Which materials make you feel like yourself? Which ones do you avoid?",
-  "What's the most frustrating thing about your wardrobe right now?",
-  "If you could only wear one outfit for a week, what would it be?",
+export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
+  { kind: "open", prompt: "What's your go-to work outfit on a good day?" },
+  { kind: "open", prompt: "Name one thing in your wardrobe you love and always reach for." },
+  { kind: "open", prompt: "Name one thing hanging there you never wear — and why." },
+  { kind: "open", prompt: "How would you describe your personal style in three words?" },
+  { kind: "open", prompt: "Which designers or brands do you love, even if you can't always afford them?" },
+  { kind: "open", prompt: "Where do you shop most — and where do you wish you shopped?" },
+  { kind: "open", prompt: "What do you want to feel like when you're dressed?" },
 ];
