@@ -1,44 +1,66 @@
-// Atelier interview edge function — calls Anthropic Claude.
-// One mode:
-//   - "synthesise": given all 10 fixed answers, return a structured style profile
-// Uses Claude tool-use for reliable structured output.
+// Atelier interview edge function — synthesises 10 answers into a style profile.
+// Uses Lovable AI Gateway (OpenAI-compatible) with tool-calling for structured output.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-5";
+const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const MODEL = "google/gemini-2.5-flash";
 
 type Answer = { question_index: number; question: string; answer: string };
 
 const SYSTEM_SYNTH = `You are Atelier, distilling a 10-question style interview into a usable style profile. Write with editorial confidence — like a stylist's notes, not a personality quiz. No exclamation marks.`;
 
-async function callClaude(body: Record<string, unknown>) {
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const resp = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+const TOOL = {
+  type: "function",
+  function: {
+    name: "save_profile",
+    description: "Save the woman's style profile.",
+    parameters: {
+      type: "object",
+      properties: {
+        style_summary: {
+          type: "string",
+          description: "2-4 sentences capturing her style in editorial voice. Confident, specific.",
+        },
+        style_archetypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "2-4 short archetype labels, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'.",
+        },
+        colour_palette: {
+          type: "array",
+          items: { type: "string" },
+          description: "5-8 colours she actually wears or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
+        },
+        avoid_list: {
+          type: "array",
+          items: { type: "string" },
+          description: "3-6 specific things she should avoid — silhouettes, colours, materials. Short phrases.",
+        },
+        body_notes: {
+          type: "string",
+          description: "1-2 sentences on fit and silhouette guidance based on what she said about her body. Empty string if unclear.",
+        },
+        budget_ceiling: {
+          type: "integer",
+          description: "Per-piece budget ceiling in EUR as a whole number. 0 if unclear.",
+        },
+      },
+      required: [
+        "style_summary",
+        "style_archetypes",
+        "colour_palette",
+        "avoid_list",
+        "body_notes",
+        "budget_ceiling",
+      ],
+      additionalProperties: false,
     },
-    body: JSON.stringify(body),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    console.error("Anthropic error", resp.status, text);
-    const err = new Error(`Anthropic ${resp.status}`);
-    // @ts-expect-error attach for handler
-    err.status = resp.status;
-    throw err;
-  }
-  return await resp.json();
-}
+  },
+};
 
 function transcript(history: Answer[]) {
   return history
@@ -51,93 +73,64 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { mode, history } = await req.json();
-    if (!mode || !Array.isArray(history)) {
+    const { history } = await req.json();
+    if (!Array.isArray(history) || history.length === 0) {
       return new Response(JSON.stringify({ error: "Invalid request" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (mode === "synthesise") {
-      const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce her style profile by calling the save_profile tool.`;
+    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-      const data = await callClaude({
+    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce her style profile by calling the save_profile tool.`;
+
+    const resp = await fetch(GATEWAY_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
-        system: SYSTEM_SYNTH,
-        tools: [
-          {
-            name: "save_profile",
-            description: "Save the woman's style profile.",
-            input_schema: {
-              type: "object",
-              properties: {
-                style_summary: {
-                  type: "string",
-                  description: "2-4 sentences capturing her style in editorial voice. Confident, specific.",
-                },
-                style_archetypes: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "2-4 short archetype labels, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'.",
-                },
-                colour_palette: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "5-8 colours she actually wears or should lean into. Plain English names: 'cream', 'oxblood', 'navy'.",
-                },
-                avoid_list: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "3-6 specific things she should avoid — silhouettes, colours, materials. Short phrases.",
-                },
-                body_notes: {
-                  type: "string",
-                  description: "1-2 sentences on fit and silhouette guidance based on what she said about her body. Empty string if she didn't share.",
-                },
-                budget_ceiling: {
-                  type: "integer",
-                  description: "Per-piece budget ceiling in her stated currency, as a whole number. 0 if unclear.",
-                },
-              },
-              required: [
-                "style_summary",
-                "style_archetypes",
-                "colour_palette",
-                "avoid_list",
-                "body_notes",
-                "budget_ceiling",
-              ],
-            },
-          },
+        messages: [
+          { role: "system", content: SYSTEM_SYNTH },
+          { role: "user", content: userMsg },
         ],
-        tool_choice: { type: "tool", name: "save_profile" },
-        messages: [{ role: "user", content: userMsg }],
-      });
+        tools: [TOOL],
+        tool_choice: { type: "function", function: { name: "save_profile" } },
+      }),
+    });
 
-      const toolUse = data?.content?.find((c: { type: string }) => c.type === "tool_use");
-      if (!toolUse?.input) throw new Error("No tool_use in response");
-
-      return new Response(JSON.stringify({ profile: toolUse.input }), {
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error("Gateway error", resp.status, text);
+      let userMessage = "Something went wrong building your profile. Try again in a moment.";
+      if (resp.status === 429) userMessage = "Lots of requests right now. Try again in a moment.";
+      if (resp.status === 402) userMessage = "AI credits are exhausted. Top up Lovable AI to continue.";
+      return new Response(JSON.stringify({ error: userMessage }), {
+        status: resp.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ error: "Unknown mode" }), {
-      status: 400,
+    const data = await resp.json();
+    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall?.function?.arguments) {
+      console.error("No tool call in gateway response", JSON.stringify(data));
+      throw new Error("No tool_call in response");
+    }
+    const profile = JSON.parse(toolCall.function.arguments);
+
+    return new Response(JSON.stringify({ profile }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    const status = (e as { status?: number })?.status;
-    let userMessage = "Something went wrong. Try again in a moment.";
-    if (status === 429) userMessage = "Too many requests. Try again in a moment.";
-    if (status === 401) userMessage = "AI key isn't valid. Check the project secrets.";
-    if (status === 529) userMessage = "AI is overloaded right now. Try again shortly.";
     console.error("interview function error:", e);
-    return new Response(JSON.stringify({ error: userMessage }), {
-      status: status && status >= 400 && status < 600 ? status : 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: "Something went wrong building your profile. Try again in a moment." }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 });

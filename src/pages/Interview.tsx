@@ -28,12 +28,10 @@ export default function Interview() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // For choice / multi questions
   const [chosen, setChosen] = useState<string | null>(null);
   const [otherText, setOtherText] = useState("");
   const [multiAnswers, setMultiAnswers] = useState<Record<string, string>>({});
   const [multiOther, setMultiOther] = useState<Record<string, string>>({});
-  // For open questions
   const [draft, setDraft] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,34 +40,25 @@ export default function Interview() {
     if (!user) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error: selErr } = await supabase
         .from("interview_answers")
         .select("question_index, question, answer")
         .eq("user_id", user.id)
         .order("question_index", { ascending: true });
       if (cancelled) return;
+      if (selErr) console.error("[interview] hydrate error", selErr);
       const existing = (data ?? []) as StoredAnswer[];
       setAnswers(existing);
       const next = existing.length;
       if (next >= TOTAL) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("interview_complete")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (prof?.interview_complete) {
-          navigate("/app/interview/complete", { replace: true });
-          return;
-        }
-        await synthesise(existing);
+        navigate("/app/interview/complete", { replace: true });
         return;
       }
       setCurrentIndex(next);
       setHydrating(false);
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, navigate]);
 
   const progress = useMemo(
     () => Math.round((currentIndex / TOTAL) * 100),
@@ -82,51 +71,16 @@ export default function Interview() {
   const currentOpen = currentIndex >= FIXED_QUESTIONS.length
     ? FIXED_OPEN_QUESTIONS[currentIndex - FIXED_QUESTIONS.length] ?? null
     : null;
+
   const headlineQuestion = currentFixed
     ? currentFixed.kind === "multi"
-      ? "A few quick things about fit."
+      ? "A few quick things about you."
       : currentFixed.prompt
     : currentOpen?.prompt ?? "";
 
-  async function synthesise(history: StoredAnswer[]) {
-    if (!user) return;
-    setBusy(true);
-    setError(null);
-    const { data, error: fnError } = await supabase.functions.invoke("interview", {
-      body: { mode: "synthesise", history },
-    });
-    if (fnError || !data?.profile) {
-      setBusy(false);
-      setError(copy.interview.errorSaving);
-      return;
-    }
-    const p = data.profile;
-    const { error: upErr } = await supabase
-      .from("profiles")
-      .update({
-        style_summary: p.style_summary ?? null,
-        colour_palette: p.colour_palette ?? [],
-        style_archetypes: p.style_archetypes ?? [],
-        avoid_list: p.avoid_list ?? [],
-        body_notes: p.body_notes ?? null,
-        budget_ceiling: p.budget_ceiling ?? null,
-        interview_complete: true,
-      })
-      .eq("id", user.id);
-    setBusy(false);
-    if (upErr) {
-      setError(copy.interview.errorSaving);
-      return;
-    }
-    navigate("/app/interview/complete", { replace: true });
-  }
-
   function buildAnswerText(): string | null {
     if (currentFixed?.kind === "choice") {
-      if (chosen === "__other__") {
-        const t = otherText.trim();
-        return t || null;
-      }
+      if (chosen === "__other__") return otherText.trim() || null;
       return chosen;
     }
     if (currentFixed?.kind === "multi") {
@@ -166,6 +120,7 @@ export default function Interview() {
       .from("interview_answers")
       .upsert({ ...entry, user_id: user.id }, { onConflict: "user_id,question_index" });
     if (insErr) {
+      console.error("[interview] save error", insErr);
       setBusy(false);
       setError(copy.interview.errorSaving);
       return;
@@ -174,7 +129,6 @@ export default function Interview() {
       .sort((a, b) => a.question_index - b.question_index);
     setAnswers(newHistory);
 
-    // Reset inputs
     setChosen(null);
     setOtherText("");
     setMultiAnswers({});
@@ -183,7 +137,8 @@ export default function Interview() {
 
     const nextIndex = currentIndex + 1;
     if (nextIndex >= TOTAL) {
-      await synthesise(newHistory);
+      // Hand off to the complete page, which will run synthesis with a loading state.
+      navigate("/app/interview/complete", { replace: true });
       return;
     }
     setCurrentIndex(nextIndex);
@@ -193,8 +148,7 @@ export default function Interview() {
 
   const goBack = () => {
     if (currentIndex === 0 || busy) return;
-    const prevIndex = currentIndex - 1;
-    setCurrentIndex(prevIndex);
+    setCurrentIndex(currentIndex - 1);
     setChosen(null);
     setOtherText("");
     setMultiAnswers({});
@@ -229,7 +183,6 @@ export default function Interview() {
           {headlineQuestion}
         </h1>
 
-        {/* Choice */}
         {currentFixed?.kind === "choice" && (
           <div className="mt-8 space-y-3">
             {currentFixed.options.map((opt) => (
@@ -261,7 +214,6 @@ export default function Interview() {
           </div>
         )}
 
-        {/* Multi-part */}
         {currentFixed?.kind === "multi" && (
           <div className="mt-8 space-y-8">
             {currentFixed.parts.map((part) => (
@@ -273,18 +225,14 @@ export default function Interview() {
                       key={opt}
                       label={opt}
                       selected={multiAnswers[part.id] === opt}
-                      onClick={() =>
-                        setMultiAnswers((m) => ({ ...m, [part.id]: opt }))
-                      }
+                      onClick={() => setMultiAnswers((m) => ({ ...m, [part.id]: opt }))}
                     />
                   ))}
                   {part.allowOther && (
                     <PillChip
                       label="Other"
                       selected={multiAnswers[part.id] === "__other__"}
-                      onClick={() =>
-                        setMultiAnswers((m) => ({ ...m, [part.id]: "__other__" }))
-                      }
+                      onClick={() => setMultiAnswers((m) => ({ ...m, [part.id]: "__other__" }))}
                     />
                   )}
                 </div>
@@ -304,7 +252,6 @@ export default function Interview() {
           </div>
         )}
 
-        {/* Open */}
         {!currentFixed && (
           <Textarea
             ref={taRef}
@@ -338,7 +285,7 @@ export default function Interview() {
             className="rounded-sm h-11 px-6"
           >
             {busy
-              ? (currentIndex + 1 >= TOTAL ? copy.interview.saving : copy.interview.thinking)
+              ? copy.interview.thinking
               : (currentIndex + 1 === TOTAL ? copy.interview.finish : copy.interview.next)}
           </Button>
         </div>
@@ -347,15 +294,7 @@ export default function Interview() {
   );
 }
 
-function ChoiceChip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
+function ChoiceChip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -372,15 +311,7 @@ function ChoiceChip({
   );
 }
 
-function PillChip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
+function PillChip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
