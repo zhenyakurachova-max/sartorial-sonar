@@ -33,7 +33,7 @@ export default function Interview() {
   const [otherText, setOtherText] = useState("");
   const [multiAnswers, setMultiAnswers] = useState<Record<string, string>>({});
   const [multiOther, setMultiOther] = useState<Record<string, string>>({});
-  // For open / adaptive question
+  // For open questions
   const [draft, setDraft] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -304,7 +304,7 @@ export default function Interview() {
           </div>
         )}
 
-        {/* Open / adaptive */}
+        {/* Open */}
         {!currentFixed && (
           <Textarea
             ref={taRef}
