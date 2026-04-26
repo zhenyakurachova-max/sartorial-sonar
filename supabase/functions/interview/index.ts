@@ -1,7 +1,6 @@
 // Atelier interview edge function — calls Anthropic Claude.
-// Two modes:
-//   - "next_question": given prior answers, return the next adaptive question (text)
-//   - "synthesise": given all 10 answers, return a structured style profile
+// One mode:
+//   - "synthesise": given all 10 fixed answers, return a structured style profile
 // Uses Claude tool-use for reliable structured output.
 
 import { corsHeaders } from "@supabase/supabase-js/cors";
@@ -10,16 +9,6 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-5";
 
 type Answer = { question_index: number; question: string; answer: string };
-
-const SYSTEM_NEXT = `You are Atelier — an AI personal stylist with strong, opinionated taste, like a knowing friend who works in fashion. You are interviewing a woman to build her style profile.
-
-Tone: direct, warm, confident. No exclamation marks. No hedging ("maybe", "perhaps", "kind of"). Sound like a person, not a survey.
-
-You have just been given her previous answers. Write the SINGLE next question to ask her. Cover, across the full 10 questions: lifestyle, budget, body/fit, colours she actually wears, references or icons she's drawn to, hard nos, occasions she dresses up for, materials and comfort, current frustrations with her wardrobe, and one curious wildcard.
-
-Pick whichever angle hasn't been explored yet and feels most useful given what she's already told you. Reference something specific she said when natural.
-
-Return ONLY the question itself — one or two sentences max. No preamble, no numbering, no quotes.`;
 
 const SYSTEM_SYNTH = `You are Atelier, distilling a 10-question style interview into a usable style profile. Write with editorial confidence — like a stylist's notes, not a personality quiz. No exclamation marks.`;
 
@@ -59,28 +48,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { mode, history, total } = await req.json();
+    const { mode, history } = await req.json();
     if (!mode || !Array.isArray(history)) {
       return new Response(JSON.stringify({ error: "Invalid request" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (mode === "next_question") {
-      const remaining = (total ?? 10) - history.length;
-      const userMsg = `Here is what she's told you so far:\n\n${transcript(history as Answer[]) || "(nothing yet)"}\n\nThere are ${remaining} questions left including this one. Write the next question.`;
-
-      const data = await callClaude({
-        model: MODEL,
-        max_tokens: 200,
-        system: SYSTEM_NEXT,
-        messages: [{ role: "user", content: userMsg }],
-      });
-
-      const question = (data?.content?.[0]?.text ?? "").trim().replace(/^["']|["']$/g, "");
-      if (!question) throw new Error("Empty response");
-      return new Response(JSON.stringify({ question }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
