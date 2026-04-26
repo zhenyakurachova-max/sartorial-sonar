@@ -29,8 +29,9 @@ export const copy = {
     finish: "Finish",
     thinking: "Thinking…",
     saving: "Saving your profile…",
-    errorThinking: "Couldn't generate the next question. Try again in a moment.",
     errorSaving: "Couldn't save that. Try once more.",
+    otherPlaceholder: "Type your own…",
+    chooseOne: "Choose one",
   },
 
   complete: {
