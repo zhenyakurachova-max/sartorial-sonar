@@ -1,5 +1,5 @@
 // Question definitions for the interview flow.
-// Q1–Q3 are fixed and structured. Q4–Q10 are fixed open-text prompts.
+// Q1–Q3 are fixed/structured. Q4–Q10 are fixed open-text prompts.
 
 export type ChoiceQuestion = {
   kind: "choice";
@@ -23,14 +23,16 @@ export type Question = ChoiceQuestion | MultiPartQuestion | OpenQuestion;
 export const FIXED_QUESTIONS: Question[] = [
   {
     kind: "choice",
-    prompt: "Where do you spend most of your week — and what do you wear there?",
+    prompt: "What does your typical week look like?",
     options: [
-      "Office / Hybrid work",
-      "Mostly at home",
-      "Client-facing / hospitality",
-      "Mixed lifestyle",
+      "I work in an office",
+      "I work from home",
+      "I'm mostly out and about — meetings, clients, errands",
+      "I wear a uniform at work",
+      "My week is a real mix",
+      "Mostly social and personal life",
     ],
-    allowOther: true,
+    allowOther: false,
   },
   {
     kind: "choice",
@@ -42,26 +44,25 @@ export const FIXED_QUESTIONS: Question[] = [
     kind: "multi",
     parts: [
       {
-        id: "frame",
-        prompt: "How would you describe your frame?",
-        options: ["Petite", "Tall", "Athletic", "Curvy", "Straight", "Plus"],
-      },
-      {
-        id: "fit_challenges",
-        prompt: "Any fit challenges you want me to work around?",
+        id: "love_dressing",
+        prompt: "Which part of your body do you love dressing?",
         options: [
-          "Short torso",
-          "Long torso",
-          "Narrow shoulders",
-          "Broad shoulders",
-          "None",
+          "My shoulders and neckline",
+          "My waist",
+          "My legs",
+          "My arms",
+          "All of it honestly",
         ],
-        allowOther: true,
       },
       {
-        id: "waist",
-        prompt: "Do you prefer clothes that define your waist or sit relaxed?",
-        options: ["Define my waist", "Relaxed fit", "Depends on the piece"],
+        id: "fit_feel",
+        prompt: "How do you like your clothes to feel on your body?",
+        options: [
+          "Structured and tailored",
+          "Relaxed and easy",
+          "Fitted but comfortable",
+          "Depends on the occasion",
+        ],
       },
     ],
   },
@@ -70,9 +71,9 @@ export const FIXED_QUESTIONS: Question[] = [
 export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
   { kind: "open", prompt: "What's your go-to work outfit on a good day?" },
   { kind: "open", prompt: "Name one thing in your wardrobe you love and always reach for." },
-  { kind: "open", prompt: "Name one thing hanging there you never wear — and why." },
+  { kind: "open", prompt: "Name one thing in your wardrobe you never wear." },
   { kind: "open", prompt: "How would you describe your personal style in three words?" },
   { kind: "open", prompt: "Which designers or brands do you love, even if you can't always afford them?" },
-  { kind: "open", prompt: "Where do you shop most — and where do you wish you shopped?" },
+  { kind: "open", prompt: "Where do you shop most?" },
   { kind: "open", prompt: "What do you want to feel like when you're dressed?" },
 ];
