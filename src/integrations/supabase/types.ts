@@ -14,7 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      interview_answers: {
+        Row: {
+          answer: string
+          created_at: string
+          id: string
+          question: string
+          question_index: number
+          user_id: string
+        }
+        Insert: {
+          answer: string
+          created_at?: string
+          id?: string
+          question: string
+          question_index: number
+          user_id: string
+        }
+        Update: {
+          answer?: string
+          created_at?: string
+          id?: string
+          question?: string
+          question_index?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avoid_list: string[]
+          body_notes: string | null
+          budget_ceiling: number | null
+          colour_palette: string[]
+          created_at: string
+          id: string
+          interview_complete: boolean
+          style_archetypes: string[]
+          style_summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          avoid_list?: string[]
+          body_notes?: string | null
+          budget_ceiling?: number | null
+          colour_palette?: string[]
+          created_at?: string
+          id: string
+          interview_complete?: boolean
+          style_archetypes?: string[]
+          style_summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avoid_list?: string[]
+          body_notes?: string | null
+          budget_ceiling?: number | null
+          colour_palette?: string[]
+          created_at?: string
+          id?: string
+          interview_complete?: boolean
+          style_archetypes?: string[]
+          style_summary?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
