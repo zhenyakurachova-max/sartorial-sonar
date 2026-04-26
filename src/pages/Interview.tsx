@@ -10,7 +10,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
 import {
   FIXED_QUESTIONS,
-  FALLBACK_QUESTIONS,
+  FIXED_OPEN_QUESTIONS,
   type Question,
 } from "@/lib/interview-questions";
 
@@ -24,7 +24,6 @@ export default function Interview() {
 
   const [answers, setAnswers] = useState<StoredAnswer[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [adaptiveQuestion, setAdaptiveQuestion] = useState<string>("");
   const [hydrating, setHydrating] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +33,7 @@ export default function Interview() {
   const [otherText, setOtherText] = useState("");
   const [multiAnswers, setMultiAnswers] = useState<Record<string, string>>({});
   const [multiOther, setMultiOther] = useState<Record<string, string>>({});
-  // For open / adaptive question
+  // For open questions
   const [draft, setDraft] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -66,9 +65,6 @@ export default function Interview() {
         return;
       }
       setCurrentIndex(next);
-      if (next >= FIXED_QUESTIONS.length) {
-        await fetchAdaptive(existing, next);
-      }
       setHydrating(false);
     })();
     return () => { cancelled = true; };
@@ -83,36 +79,14 @@ export default function Interview() {
   const currentFixed: Question | null =
     currentIndex < FIXED_QUESTIONS.length ? FIXED_QUESTIONS[currentIndex] : null;
 
-  const adaptiveIndex = currentIndex - FIXED_QUESTIONS.length;
-  const fallback =
-    FALLBACK_QUESTIONS[adaptiveIndex] ??
-    FALLBACK_QUESTIONS[FALLBACK_QUESTIONS.length - 1];
+  const currentOpen = currentIndex >= FIXED_QUESTIONS.length
+    ? FIXED_OPEN_QUESTIONS[currentIndex - FIXED_QUESTIONS.length] ?? null
+    : null;
   const headlineQuestion = currentFixed
     ? currentFixed.kind === "multi"
       ? "A few quick things about fit."
       : currentFixed.prompt
-    : adaptiveQuestion || fallback;
-
-  async function fetchAdaptive(history: StoredAnswer[], index: number) {
-    setBusy(true);
-    setError(null);
-    const fbIdx = index - FIXED_QUESTIONS.length;
-    const fb = FALLBACK_QUESTIONS[fbIdx] ?? FALLBACK_QUESTIONS[FALLBACK_QUESTIONS.length - 1];
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke("interview", {
-        body: { mode: "next_question", history, total: TOTAL },
-      });
-      if (fnError || !data?.question) {
-        setAdaptiveQuestion(fb);
-      } else {
-        setAdaptiveQuestion(data.question as string);
-      }
-    } catch {
-      setAdaptiveQuestion(fb);
-    }
-    setBusy(false);
-    requestAnimationFrame(() => taRef.current?.focus());
-  }
+    : currentOpen?.prompt ?? "";
 
   async function synthesise(history: StoredAnswer[]) {
     if (!user) return;
@@ -173,7 +147,7 @@ export default function Interview() {
     if (currentFixed?.kind === "multi") {
       return currentFixed.parts.map((p) => p.prompt).join(" / ");
     }
-    return adaptiveQuestion || fallback;
+    return currentOpen?.prompt ?? "";
   }
 
   const submit = async () => {
@@ -206,7 +180,6 @@ export default function Interview() {
     setMultiAnswers({});
     setMultiOther({});
     setDraft("");
-    setAdaptiveQuestion("");
 
     const nextIndex = currentIndex + 1;
     if (nextIndex >= TOTAL) {
@@ -214,11 +187,8 @@ export default function Interview() {
       return;
     }
     setCurrentIndex(nextIndex);
-    if (nextIndex >= FIXED_QUESTIONS.length) {
-      await fetchAdaptive(newHistory, nextIndex);
-    } else {
-      setBusy(false);
-    }
+    setBusy(false);
+    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   const goBack = () => {
@@ -256,7 +226,7 @@ export default function Interview() {
           key={currentIndex}
           className="font-serif text-3xl leading-snug text-balance animate-in fade-in slide-in-from-bottom-2 duration-500"
         >
-          {busy && !adaptiveQuestion && !currentFixed ? copy.interview.thinking : headlineQuestion}
+          {headlineQuestion}
         </h1>
 
         {/* Choice */}
@@ -334,7 +304,7 @@ export default function Interview() {
           </div>
         )}
 
-        {/* Open / adaptive */}
+        {/* Open */}
         {!currentFixed && (
           <Textarea
             ref={taRef}
