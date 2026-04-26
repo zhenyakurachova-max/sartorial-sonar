@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,11 +35,10 @@ export default function Signup() {
 
   const signInWithGoogle = async () => {
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: REDIRECT_TO },
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: REDIRECT_TO,
     });
-    if (error) setError(copy.signup.errorGeneric);
+    if ("error" in result && result.error) setError(copy.signup.errorGeneric);
   };
 
   return (
