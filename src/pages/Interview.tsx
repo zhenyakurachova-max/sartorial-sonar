@@ -147,7 +147,7 @@ export default function Interview() {
     if (currentFixed?.kind === "multi") {
       return currentFixed.parts.map((p) => p.prompt).join(" / ");
     }
-    return adaptiveQuestion || fallback;
+    return currentOpen?.prompt ?? "";
   }
 
   const submit = async () => {
@@ -180,7 +180,6 @@ export default function Interview() {
     setMultiAnswers({});
     setMultiOther({});
     setDraft("");
-    setAdaptiveQuestion("");
 
     const nextIndex = currentIndex + 1;
     if (nextIndex >= TOTAL) {
@@ -188,11 +187,8 @@ export default function Interview() {
       return;
     }
     setCurrentIndex(nextIndex);
-    if (nextIndex >= FIXED_QUESTIONS.length) {
-      await fetchAdaptive(newHistory, nextIndex);
-    } else {
-      setBusy(false);
-    }
+    setBusy(false);
+    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   const goBack = () => {
@@ -230,7 +226,7 @@ export default function Interview() {
           key={currentIndex}
           className="font-serif text-3xl leading-snug text-balance animate-in fade-in slide-in-from-bottom-2 duration-500"
         >
-          {busy && !adaptiveQuestion && !currentFixed ? copy.interview.thinking : headlineQuestion}
+          {headlineQuestion}
         </h1>
 
         {/* Choice */}
