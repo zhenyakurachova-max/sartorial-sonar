@@ -3,35 +3,42 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
+import {
+  FIXED_QUESTIONS,
+  FALLBACK_QUESTIONS,
+  type Question,
+} from "@/lib/interview-questions";
 
 const TOTAL = 10;
 
-const FIXED_QUESTIONS = [
-  "Where do you spend most of your week — and what do you wear there?",
-  "What's your budget ceiling for a single piece you'd actually buy?",
-  "Anything about your body or how clothes fit that I should know?",
-];
-
-type Answer = { question_index: number; question: string; answer: string };
+type StoredAnswer = { question_index: number; question: string; answer: string };
 
 export default function Interview() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [answers, setAnswers] = useState<Answer[]>([]);
+  const [answers, setAnswers] = useState<StoredAnswer[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentQuestion, setCurrentQuestion] = useState<string>(FIXED_QUESTIONS[0]);
-  const [draft, setDraft] = useState("");
+  const [adaptiveQuestion, setAdaptiveQuestion] = useState<string>("");
   const [hydrating, setHydrating] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // For choice / multi questions
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [otherText, setOtherText] = useState("");
+  const [multiAnswers, setMultiAnswers] = useState<Record<string, string>>({});
+  const [multiOther, setMultiOther] = useState<Record<string, string>>({});
+  // For open / adaptive question
+  const [draft, setDraft] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Hydrate from DB so user can resume.
+  // Hydrate
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -42,11 +49,10 @@ export default function Interview() {
         .eq("user_id", user.id)
         .order("question_index", { ascending: true });
       if (cancelled) return;
-      const existing = (data ?? []) as Answer[];
+      const existing = (data ?? []) as StoredAnswer[];
       setAnswers(existing);
       const next = existing.length;
       if (next >= TOTAL) {
-        // Already done — synthesise (or jump to complete if profile already exists)
         const { data: prof } = await supabase
           .from("profiles")
           .select("interview_complete")
@@ -60,35 +66,55 @@ export default function Interview() {
         return;
       }
       setCurrentIndex(next);
-      if (next < FIXED_QUESTIONS.length) {
-        setCurrentQuestion(FIXED_QUESTIONS[next]);
-      } else {
-        await fetchNextQuestion(existing);
+      if (next >= FIXED_QUESTIONS.length) {
+        await fetchAdaptive(existing, next);
       }
       setHydrating(false);
-      requestAnimationFrame(() => taRef.current?.focus());
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const progress = useMemo(() => Math.round((currentIndex / TOTAL) * 100), [currentIndex]);
+  const progress = useMemo(
+    () => Math.round((currentIndex / TOTAL) * 100),
+    [currentIndex],
+  );
 
-  async function fetchNextQuestion(history: Answer[]) {
+  const currentFixed: Question | null =
+    currentIndex < FIXED_QUESTIONS.length ? FIXED_QUESTIONS[currentIndex] : null;
+
+  const adaptiveIndex = currentIndex - FIXED_QUESTIONS.length;
+  const fallback =
+    FALLBACK_QUESTIONS[adaptiveIndex] ??
+    FALLBACK_QUESTIONS[FALLBACK_QUESTIONS.length - 1];
+  const headlineQuestion = currentFixed
+    ? currentFixed.kind === "multi"
+      ? "A few quick things about fit."
+      : currentFixed.prompt
+    : adaptiveQuestion || fallback;
+
+  async function fetchAdaptive(history: StoredAnswer[], index: number) {
     setBusy(true);
     setError(null);
-    const { data, error: fnError } = await supabase.functions.invoke("interview", {
-      body: { mode: "next_question", history, total: TOTAL },
-    });
-    setBusy(false);
-    if (fnError || !data?.question) {
-      setError(copy.interview.errorThinking);
-      return;
+    const fbIdx = index - FIXED_QUESTIONS.length;
+    const fb = FALLBACK_QUESTIONS[fbIdx] ?? FALLBACK_QUESTIONS[FALLBACK_QUESTIONS.length - 1];
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke("interview", {
+        body: { mode: "next_question", history, total: TOTAL },
+      });
+      if (fnError || !data?.question) {
+        setAdaptiveQuestion(fb);
+      } else {
+        setAdaptiveQuestion(data.question as string);
+      }
+    } catch {
+      setAdaptiveQuestion(fb);
     }
-    setCurrentQuestion(data.question as string);
+    setBusy(false);
+    requestAnimationFrame(() => taRef.current?.focus());
   }
 
-  async function synthesise(history: Answer[]) {
+  async function synthesise(history: StoredAnswer[]) {
     if (!user) return;
     setBusy(true);
     setError(null);
@@ -121,12 +147,44 @@ export default function Interview() {
     navigate("/app/interview/complete", { replace: true });
   }
 
+  function buildAnswerText(): string | null {
+    if (currentFixed?.kind === "choice") {
+      if (chosen === "__other__") {
+        const t = otherText.trim();
+        return t || null;
+      }
+      return chosen;
+    }
+    if (currentFixed?.kind === "multi") {
+      const parts = currentFixed.parts.map((p) => {
+        const v = multiAnswers[p.id];
+        if (!v) return null;
+        const final = v === "__other__" ? multiOther[p.id]?.trim() : v;
+        return final ? `${p.prompt} — ${final}` : null;
+      });
+      if (parts.some((x) => !x)) return null;
+      return parts.join("\n");
+    }
+    return draft.trim() || null;
+  }
+
+  function questionTextForStorage(): string {
+    if (currentFixed?.kind === "choice") return currentFixed.prompt;
+    if (currentFixed?.kind === "multi") {
+      return currentFixed.parts.map((p) => p.prompt).join(" / ");
+    }
+    return adaptiveQuestion || fallback;
+  }
+
   const submit = async () => {
-    if (!user || !draft.trim() || busy) return;
-    const entry: Answer = {
+    if (!user || busy) return;
+    const answerText = buildAnswerText();
+    if (!answerText) return;
+
+    const entry: StoredAnswer = {
       question_index: currentIndex,
-      question: currentQuestion,
-      answer: draft.trim(),
+      question: questionTextForStorage(),
+      answer: answerText,
     };
     setBusy(true);
     setError(null);
@@ -138,9 +196,17 @@ export default function Interview() {
       setError(copy.interview.errorSaving);
       return;
     }
-    const newHistory = [...answers, entry];
+    const newHistory = [...answers.filter((a) => a.question_index !== currentIndex), entry]
+      .sort((a, b) => a.question_index - b.question_index);
     setAnswers(newHistory);
+
+    // Reset inputs
+    setChosen(null);
+    setOtherText("");
+    setMultiAnswers({});
+    setMultiOther({});
     setDraft("");
+    setAdaptiveQuestion("");
 
     const nextIndex = currentIndex + 1;
     if (nextIndex >= TOTAL) {
@@ -148,25 +214,26 @@ export default function Interview() {
       return;
     }
     setCurrentIndex(nextIndex);
-    if (nextIndex < FIXED_QUESTIONS.length) {
-      setCurrentQuestion(FIXED_QUESTIONS[nextIndex]);
-      setBusy(false);
+    if (nextIndex >= FIXED_QUESTIONS.length) {
+      await fetchAdaptive(newHistory, nextIndex);
     } else {
-      await fetchNextQuestion(newHistory);
+      setBusy(false);
     }
-    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   const goBack = () => {
     if (currentIndex === 0 || busy) return;
     const prevIndex = currentIndex - 1;
-    const prev = answers[prevIndex];
-    if (!prev) return;
-    setAnswers(answers.slice(0, prevIndex));
     setCurrentIndex(prevIndex);
-    setCurrentQuestion(prev.question);
-    setDraft(prev.answer);
+    setChosen(null);
+    setOtherText("");
+    setMultiAnswers({});
+    setMultiOther({});
+    setDraft("");
+    setError(null);
   };
+
+  const canSubmit = !!buildAnswerText() && !busy;
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
@@ -180,33 +247,111 @@ export default function Interview() {
         <Progress value={progress} className="mt-4 h-px bg-border" />
       </header>
 
-      <section className="flex-1 px-6 pt-16 pb-10 max-w-md mx-auto w-full">
+      <section className="flex-1 px-6 pt-12 pb-10 max-w-md mx-auto w-full">
         {hydrating && currentIndex === 0 && answers.length === 0 ? (
-          <p className="text-muted-foreground">{copy.interview.intro}</p>
+          <p className="text-muted-foreground mb-6">{copy.interview.intro}</p>
         ) : null}
 
         <h1
           key={currentIndex}
           className="font-serif text-3xl leading-snug text-balance animate-in fade-in slide-in-from-bottom-2 duration-500"
         >
-          {busy && !currentQuestion ? copy.interview.thinking : currentQuestion}
+          {busy && !adaptiveQuestion && !currentFixed ? copy.interview.thinking : headlineQuestion}
         </h1>
 
-        <Textarea
-          ref={taRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={copy.interview.placeholder}
-          rows={4}
-          className="mt-8 rounded-sm border-foreground/20 bg-transparent text-base focus-visible:ring-primary resize-none"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
-          }}
-        />
+        {/* Choice */}
+        {currentFixed?.kind === "choice" && (
+          <div className="mt-8 space-y-3">
+            {currentFixed.options.map((opt) => (
+              <ChoiceChip
+                key={opt}
+                label={opt}
+                selected={chosen === opt}
+                onClick={() => setChosen(opt)}
+              />
+            ))}
+            {currentFixed.allowOther && (
+              <>
+                <ChoiceChip
+                  label="Other (type your own)"
+                  selected={chosen === "__other__"}
+                  onClick={() => setChosen("__other__")}
+                />
+                {chosen === "__other__" && (
+                  <Input
+                    autoFocus
+                    value={otherText}
+                    onChange={(e) => setOtherText(e.target.value)}
+                    placeholder={copy.interview.otherPlaceholder}
+                    className="mt-2 h-12 rounded-sm border-foreground/20 bg-transparent focus-visible:ring-primary"
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Multi-part */}
+        {currentFixed?.kind === "multi" && (
+          <div className="mt-8 space-y-8">
+            {currentFixed.parts.map((part) => (
+              <div key={part.id}>
+                <p className="font-serif text-lg leading-snug">{part.prompt}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {part.options.map((opt) => (
+                    <PillChip
+                      key={opt}
+                      label={opt}
+                      selected={multiAnswers[part.id] === opt}
+                      onClick={() =>
+                        setMultiAnswers((m) => ({ ...m, [part.id]: opt }))
+                      }
+                    />
+                  ))}
+                  {part.allowOther && (
+                    <PillChip
+                      label="Other"
+                      selected={multiAnswers[part.id] === "__other__"}
+                      onClick={() =>
+                        setMultiAnswers((m) => ({ ...m, [part.id]: "__other__" }))
+                      }
+                    />
+                  )}
+                </div>
+                {multiAnswers[part.id] === "__other__" && (
+                  <Input
+                    autoFocus
+                    value={multiOther[part.id] ?? ""}
+                    onChange={(e) =>
+                      setMultiOther((m) => ({ ...m, [part.id]: e.target.value }))
+                    }
+                    placeholder={copy.interview.otherPlaceholder}
+                    className="mt-3 h-11 rounded-sm border-foreground/20 bg-transparent focus-visible:ring-primary"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Open / adaptive */}
+        {!currentFixed && (
+          <Textarea
+            ref={taRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={copy.interview.placeholder}
+            rows={4}
+            className="mt-8 rounded-sm border-foreground/20 bg-transparent text-base focus-visible:ring-primary resize-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+            }}
+          />
+        )}
 
         {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-        <div className="mt-8 flex items-center justify-between">
+        <div className="mt-10 flex items-center justify-between">
           <Button
             type="button"
             variant="ghost"
@@ -219,7 +364,7 @@ export default function Interview() {
           <Button
             type="button"
             onClick={submit}
-            disabled={!draft.trim() || busy}
+            disabled={!canSubmit}
             className="rounded-sm h-11 px-6"
           >
             {busy
@@ -229,5 +374,55 @@ export default function Interview() {
         </div>
       </section>
     </main>
+  );
+}
+
+function ChoiceChip({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "w-full text-left px-5 py-4 rounded-sm border transition-colors",
+        selected
+          ? "border-primary bg-primary/5 text-foreground"
+          : "border-foreground/15 hover:border-foreground/40 text-foreground",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PillChip({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "px-4 py-2 rounded-full border text-sm transition-colors",
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-foreground/20 hover:border-foreground/50 text-foreground",
+      ].join(" ")}
+    >
+      {label}
+    </button>
   );
 }
