@@ -11,38 +11,46 @@ const MODEL = "google/gemini-2.5-flash";
 
 type Answer = { question_index: number; question: string; answer: string };
 
-const SYSTEM_SYNTH = `You are Atelier, distilling a 10-question style interview into a usable style profile. Write with editorial confidence — like a stylist's notes, not a personality quiz. No exclamation marks.`;
+const SYSTEM_SYNTH = `You are Atelier, distilling a 10-question style interview into a usable style profile.
+
+VOICE RULES — read carefully:
+- Write in plain, direct English. Sound like a real person, not a fashion magazine.
+- Address the user in the SECOND PERSON: "you", "your", "yours". Never "she", "her", "hers".
+- No exclamation marks.
+- BANNED WORDS — do not use any of these or close variants: "effortless", "chic", "elevate", "elevated", "timeless elegance", "timeless", "versatile pieces", "versatile", "seamlessly", "seamless", "fashion-forward", "curated", "elevated basics", "wardrobe staples".
+- Replace fancy phrases with plain ones. Examples: instead of "effortless chic" say "easy and unfussy". Instead of "timeless elegance" say "classic and well-made". Instead of "versatile pieces" say "things you can wear lots of ways".
+- Specific over abstract. Name actual garments, colours, shapes.`;
 
 const TOOL = {
   type: "function",
   function: {
     name: "save_profile",
-    description: "Save the woman's style profile.",
+    description: "Save the user's style profile. Address the user as 'you', never 'she'.",
     parameters: {
       type: "object",
       properties: {
         style_summary: {
           type: "string",
-          description: "2-4 sentences capturing her style in editorial voice. Confident, specific.",
+          description: "2-4 sentences describing YOUR style, written in second person ('you', 'your'). Plain, direct, specific. No banned words (no 'effortless', 'chic', 'elevate', 'timeless', 'versatile', 'seamless', 'fashion-forward', 'curated').",
         },
         style_archetypes: {
           type: "array",
           items: { type: "string" },
-          description: "2-4 short archetype labels, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'.",
+          description: "2-4 short archetype labels in plain language, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'. No banned words.",
         },
         colour_palette: {
           type: "array",
           items: { type: "string" },
-          description: "5-8 colours she actually wears or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
+          description: "5-8 colours you actually wear or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
         },
         avoid_list: {
           type: "array",
           items: { type: "string" },
-          description: "3-6 specific things she should avoid — silhouettes, colours, materials. Short phrases.",
+          description: "3-6 specific things to avoid — silhouettes, colours, materials. Short phrases. No banned words.",
         },
         body_notes: {
           type: "string",
-          description: "1-2 sentences on fit and silhouette guidance based on what she said about her body. Empty string if unclear.",
+          description: "1-2 sentences on fit and silhouette guidance based on what you said about your body. Second person ('you', 'your'). Empty string if unclear. No banned words.",
         },
         budget_ceiling: {
           type: "integer",
@@ -84,7 +92,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce her style profile by calling the save_profile tool.`;
+    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce the user's style profile by calling the save_profile tool. Address the user as "you" / "your" throughout. Do not use any of the banned words listed in the system prompt.`;
 
     const resp = await fetch(GATEWAY_URL, {
       method: "POST",
