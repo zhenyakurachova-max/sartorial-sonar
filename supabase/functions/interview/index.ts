@@ -1,13 +1,13 @@
 // Atelier interview edge function — synthesises 10 answers into a style profile.
-// Uses Lovable AI Gateway (OpenAI-compatible) with tool-calling for structured output.
+// Calls Anthropic Claude directly with tool-use for structured output.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-2.5-pro";
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-sonnet-4-6";
 
 type Answer = { question_index: number; question: string; answer: string };
 
@@ -42,51 +42,48 @@ Bad avoid_list: "baggy clothes, bright colours".
 Good avoid_list: "anything that loses the shoulder line", "high-shine synthetics", "trend colours that date in a season".`;
 
 const TOOL = {
-  type: "function",
-  function: {
-    name: "save_profile",
-    description: "Save the user's style profile. Address the user as 'you', never 'she'.",
-    parameters: {
-      type: "object",
-      properties: {
-        style_summary: {
-          type: "string",
-          description: "EXACTLY 2-3 sentences. A stylist's interpretation of who you are dressing as — not a recap of your answers. Must contain at least one insight you did not state outright. Second person ('you', 'your'). No banned words. Never quote the user back to herself.",
-        },
-        style_archetypes: {
-          type: "array",
-          items: { type: "string" },
-          description: "2-3 specific, evocative archetype labels. Examples: 'quiet authority', 'off-duty creative', 'European minimalist', 'old money weekend'. NOT generic labels like 'professional' or 'casual'. Lowercase. No banned words.",
-        },
-        colour_palette: {
-          type: "array",
-          items: { type: "string" },
-          description: "MAXIMUM 4 colours. Use precise, evocative names — 'ink navy' not 'navy', 'clean ivory' not 'white', 'soft camel' not 'beige', 'oxblood' not 'red'. Lowercase.",
-        },
-        avoid_list: {
-          type: "array",
-          items: { type: "string" },
-          description: "3-5 SPECIFIC things to avoid — name the actual problem, not a vague category. 'Anything that loses the shoulder line' not 'baggy clothes'. 'High-shine synthetics' not 'cheap fabrics'. No banned words.",
-        },
-        body_notes: {
-          type: "string",
-          description: "1-2 sentences of fit and silhouette guidance, written as a stylist's read of your shape — not a recap of what you said. Second person. Empty string if truly unclear. No banned words.",
-        },
-        budget_ceiling: {
-          type: "integer",
-          description: "Per-piece budget ceiling in EUR as a whole number. 0 if unclear.",
-        },
+  name: "save_profile",
+  description: "Save the user's style profile. Address the user as 'you', never 'she'.",
+  input_schema: {
+    type: "object",
+    properties: {
+      style_summary: {
+        type: "string",
+        description: "EXACTLY 2-3 sentences. A stylist's interpretation of who you are dressing as — not a recap of your answers. Must contain at least one insight you did not state outright. Second person ('you', 'your'). No banned words. Never quote the user back to herself.",
       },
-      required: [
-        "style_summary",
-        "style_archetypes",
-        "colour_palette",
-        "avoid_list",
-        "body_notes",
-        "budget_ceiling",
-      ],
-      additionalProperties: false,
+      style_archetypes: {
+        type: "array",
+        items: { type: "string" },
+        description: "2-3 specific, evocative archetype labels. Examples: 'quiet authority', 'off-duty creative', 'European minimalist', 'old money weekend'. NOT generic labels like 'professional' or 'casual'. Lowercase. No banned words.",
+      },
+      colour_palette: {
+        type: "array",
+        items: { type: "string" },
+        description: "MAXIMUM 4 colours. Use precise, evocative names — 'ink navy' not 'navy', 'clean ivory' not 'white', 'soft camel' not 'beige', 'oxblood' not 'red'. Lowercase.",
+      },
+      avoid_list: {
+        type: "array",
+        items: { type: "string" },
+        description: "3-5 SPECIFIC things to avoid — name the actual problem, not a vague category. 'Anything that loses the shoulder line' not 'baggy clothes'. 'High-shine synthetics' not 'cheap fabrics'. No banned words.",
+      },
+      body_notes: {
+        type: "string",
+        description: "1-2 sentences of fit and silhouette guidance, written as a stylist's read of your shape — not a recap of what you said. Second person. Empty string if truly unclear. No banned words.",
+      },
+      budget_ceiling: {
+        type: "integer",
+        description: "Per-piece budget ceiling in EUR as a whole number. 0 if unclear.",
+      },
     },
+    required: [
+      "style_summary",
+      "style_archetypes",
+      "colour_palette",
+      "avoid_list",
+      "body_notes",
+      "budget_ceiling",
+    ],
+    additionalProperties: false,
   },
 };
 
@@ -109,34 +106,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat her words back. Interpret.\n- Name at least one through-line she did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- No banned words. Second person throughout.`;
 
-    const resp = await fetch(GATEWAY_URL, {
+    const resp = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: [
-          { role: "system", content: SYSTEM_SYNTH },
-          { role: "user", content: userMsg },
-        ],
+        max_tokens: 2048,
+        system: SYSTEM_SYNTH,
+        messages: [{ role: "user", content: userMsg }],
         tools: [TOOL],
-        tool_choice: { type: "function", function: { name: "save_profile" } },
+        tool_choice: { type: "tool", name: "save_profile" },
       }),
     });
 
     if (!resp.ok) {
       const text = await resp.text();
-      console.error("Gateway error", resp.status, text);
+      console.error("Anthropic error", resp.status, text);
       let userMessage = "Something went wrong building your profile. Try again in a moment.";
       if (resp.status === 429) userMessage = "Lots of requests right now. Try again in a moment.";
-      if (resp.status === 402) userMessage = "AI credits are exhausted. Top up Lovable AI to continue.";
+      if (resp.status === 401) userMessage = "Anthropic API key is invalid.";
       return new Response(JSON.stringify({ error: userMessage }), {
         status: resp.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -144,12 +141,14 @@ Deno.serve(async (req) => {
     }
 
     const data = await resp.json();
-    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall?.function?.arguments) {
-      console.error("No tool call in gateway response", JSON.stringify(data));
-      throw new Error("No tool_call in response");
+    const toolUse = Array.isArray(data?.content)
+      ? data.content.find((b: any) => b.type === "tool_use")
+      : null;
+    if (!toolUse?.input) {
+      console.error("No tool_use in Anthropic response", JSON.stringify(data));
+      throw new Error("No tool_use in response");
     }
-    const profile = JSON.parse(toolCall.function.arguments);
+    const profile = toolUse.input;
 
     return new Response(JSON.stringify({ profile }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
