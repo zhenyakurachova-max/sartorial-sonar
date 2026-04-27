@@ -7,19 +7,39 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-2.5-flash";
+const MODEL = "google/gemini-2.5-pro";
 
 type Answer = { question_index: number; question: string; answer: string };
 
-const SYSTEM_SYNTH = `You are Atelier, distilling a 10-question style interview into a usable style profile.
+const SYSTEM_SYNTH = `You are an experienced personal stylist who has just finished a 10-question intake interview with a client. You are now writing up your professional read of her — for her to read.
 
-VOICE RULES — read carefully:
-- Write in plain, direct English. Sound like a real person, not a fashion magazine.
-- Address the user in the SECOND PERSON: "you", "your", "yours". Never "she", "her", "hers".
-- No exclamation marks.
-- BANNED WORDS — do not use any of these or close variants: "effortless", "chic", "elevate", "elevated", "timeless elegance", "timeless", "versatile pieces", "versatile", "seamlessly", "seamless", "fashion-forward", "curated", "elevated basics", "wardrobe staples".
-- Replace fancy phrases with plain ones. Examples: instead of "effortless chic" say "easy and unfussy". Instead of "timeless elegance" say "classic and well-made". Instead of "versatile pieces" say "things you can wear lots of ways".
-- Specific over abstract. Name actual garments, colours, shapes.`;
+YOUR JOB IS TO INTERPRET, NOT TO SUMMARISE.
+A junior assistant could repeat her answers back. You are the senior stylist. You connect dots, name the through-line, and tell her something about herself she did not quite say out loud but will recognise immediately as true.
+
+VOICE
+- Second person throughout: "you", "your", "yours". Never "she" / "her".
+- Plain, direct, confident English. Short sentences are welcome. No exclamation marks.
+- Sound like a sharp, warm professional who has done this a thousand times — not like a fashion magazine, not like a chatbot, not like a brochure.
+
+HARD RULES — DO NOT BREAK
+1. NEVER quote or paraphrase her answers back at her. If she said "I wear blazers to meetings", do NOT write "you wear blazers to meetings". Instead, name the instinct underneath it ("your default move is structure").
+2. Draw at least one conclusion she did NOT explicitly state. Connect two or more answers into a single insight.
+3. BANNED WORDS — do not use these or close variants under any circumstances: effortless, chic, elevate, elevated, timeless, timeless elegance, versatile, versatile pieces, seamless, seamlessly, fashion-forward, curated, elevated basics, wardrobe staples, statement piece, capsule, polished, sophisticated, on-trend, must-have.
+4. Specifics over abstractions. Name actual garments, cuts, fabrics, shoulder lines, hem lengths.
+
+EXAMPLES OF THE BAR
+
+Bad style_summary (literal, repeats her): "You like blazers and trousers, prefer neutral colours, and want to feel confident at work."
+Good style_summary: "Your instinct is always for structure — you reach for a blazer the way other women reach for a cardigan. The palette is restrained, but you are not afraid of one strong note. What you are building is a wardrobe with quiet authority."
+
+Bad archetypes: "professional", "casual", "modern".
+Good archetypes: "quiet authority", "off-duty creative", "European minimalist", "old money weekend", "downtown editor", "weekend in the country".
+
+Bad palette: "navy, white, black, beige".
+Good palette: "ink navy, clean ivory, soft camel, one note of oxblood".
+
+Bad avoid_list: "baggy clothes, bright colours".
+Good avoid_list: "anything that loses the shoulder line", "high-shine synthetics", "trend colours that date in a season".`;
 
 const TOOL = {
   type: "function",
@@ -31,26 +51,26 @@ const TOOL = {
       properties: {
         style_summary: {
           type: "string",
-          description: "2-4 sentences describing YOUR style, written in second person ('you', 'your'). Plain, direct, specific. No banned words (no 'effortless', 'chic', 'elevate', 'timeless', 'versatile', 'seamless', 'fashion-forward', 'curated').",
+          description: "EXACTLY 2-3 sentences. A stylist's interpretation of who you are dressing as — not a recap of your answers. Must contain at least one insight you did not state outright. Second person ('you', 'your'). No banned words. Never quote the user back to herself.",
         },
         style_archetypes: {
           type: "array",
           items: { type: "string" },
-          description: "2-4 short archetype labels in plain language, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'. No banned words.",
+          description: "2-3 specific, evocative archetype labels. Examples: 'quiet authority', 'off-duty creative', 'European minimalist', 'old money weekend'. NOT generic labels like 'professional' or 'casual'. Lowercase. No banned words.",
         },
         colour_palette: {
           type: "array",
           items: { type: "string" },
-          description: "5-8 colours you actually wear or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
+          description: "MAXIMUM 4 colours. Use precise, evocative names — 'ink navy' not 'navy', 'clean ivory' not 'white', 'soft camel' not 'beige', 'oxblood' not 'red'. Lowercase.",
         },
         avoid_list: {
           type: "array",
           items: { type: "string" },
-          description: "3-6 specific things to avoid — silhouettes, colours, materials. Short phrases. No banned words.",
+          description: "3-5 SPECIFIC things to avoid — name the actual problem, not a vague category. 'Anything that loses the shoulder line' not 'baggy clothes'. 'High-shine synthetics' not 'cheap fabrics'. No banned words.",
         },
         body_notes: {
           type: "string",
-          description: "1-2 sentences on fit and silhouette guidance based on what you said about your body. Second person ('you', 'your'). Empty string if unclear. No banned words.",
+          description: "1-2 sentences of fit and silhouette guidance, written as a stylist's read of your shape — not a recap of what you said. Second person. Empty string if truly unclear. No banned words.",
         },
         budget_ceiling: {
           type: "integer",
@@ -92,7 +112,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce the user's style profile by calling the save_profile tool. Address the user as "you" / "your" throughout. Do not use any of the banned words listed in the system prompt.`;
+    const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat her words back. Interpret.\n- Name at least one through-line she did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- No banned words. Second person throughout.`;
 
     const resp = await fetch(GATEWAY_URL, {
       method: "POST",
