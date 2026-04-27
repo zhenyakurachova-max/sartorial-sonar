@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce the user's style profile by calling the save_profile tool. Address the user as "you" / "your" throughout. Do not use any of the banned words listed in the system prompt.`;
+    const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat her words back. Interpret.\n- Name at least one through-line she did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- No banned words. Second person throughout.`;
 
     const resp = await fetch(GATEWAY_URL, {
       method: "POST",
