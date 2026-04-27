@@ -107,8 +107,33 @@ export default function InterviewComplete() {
   const retry = async () => {
     setErrorMsg(null);
     setPhase("loading");
-    // Trigger re-run by remounting via navigate replace.
     navigate(0);
+  };
+
+  const redoInterview = async () => {
+    if (!user) return;
+    const ok = window.confirm("This will erase your answers and profile, and restart the interview from Q1. Continue?");
+    if (!ok) return;
+    setPhase("loading");
+    const { error: delAns } = await supabase
+      .from("interview_answers")
+      .delete()
+      .eq("user_id", user.id);
+    if (delAns) console.error("[redo] delete answers", delAns);
+    const { error: upProf } = await supabase
+      .from("profiles")
+      .update({
+        style_summary: null,
+        colour_palette: [],
+        style_archetypes: [],
+        avoid_list: [],
+        body_notes: null,
+        budget_ceiling: null,
+        interview_complete: false,
+      })
+      .eq("id", user.id);
+    if (upProf) console.error("[redo] reset profile", upProf);
+    navigate("/app/interview", { replace: true });
   };
 
   if (phase === "redirect") return <Navigate to="/app/interview" replace />;
