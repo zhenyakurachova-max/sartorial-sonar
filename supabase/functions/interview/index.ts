@@ -25,32 +25,32 @@ const TOOL = {
   type: "function",
   function: {
     name: "save_profile",
-    description: "Save the woman's style profile.",
+    description: "Save the user's style profile. Address the user as 'you', never 'she'.",
     parameters: {
       type: "object",
       properties: {
         style_summary: {
           type: "string",
-          description: "2-4 sentences capturing her style in editorial voice. Confident, specific.",
+          description: "2-4 sentences describing YOUR style, written in second person ('you', 'your'). Plain, direct, specific. No banned words (no 'effortless', 'chic', 'elevate', 'timeless', 'versatile', 'seamless', 'fashion-forward', 'curated').",
         },
         style_archetypes: {
           type: "array",
           items: { type: "string" },
-          description: "2-4 short archetype labels, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'.",
+          description: "2-4 short archetype labels in plain language, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'. No banned words.",
         },
         colour_palette: {
           type: "array",
           items: { type: "string" },
-          description: "5-8 colours she actually wears or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
+          description: "5-8 colours you actually wear or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
         },
         avoid_list: {
           type: "array",
           items: { type: "string" },
-          description: "3-6 specific things she should avoid — silhouettes, colours, materials. Short phrases.",
+          description: "3-6 specific things to avoid — silhouettes, colours, materials. Short phrases. No banned words.",
         },
         body_notes: {
           type: "string",
-          description: "1-2 sentences on fit and silhouette guidance based on what she said about her body. Empty string if unclear.",
+          description: "1-2 sentences on fit and silhouette guidance based on what you said about your body. Second person ('you', 'your'). Empty string if unclear. No banned words.",
         },
         budget_ceiling: {
           type: "integer",
