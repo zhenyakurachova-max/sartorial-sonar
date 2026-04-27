@@ -51,26 +51,26 @@ const TOOL = {
       properties: {
         style_summary: {
           type: "string",
-          description: "2-4 sentences describing YOUR style, written in second person ('you', 'your'). Plain, direct, specific. No banned words (no 'effortless', 'chic', 'elevate', 'timeless', 'versatile', 'seamless', 'fashion-forward', 'curated').",
+          description: "EXACTLY 2-3 sentences. A stylist's interpretation of who you are dressing as — not a recap of your answers. Must contain at least one insight you did not state outright. Second person ('you', 'your'). No banned words. Never quote the user back to herself.",
         },
         style_archetypes: {
           type: "array",
           items: { type: "string" },
-          description: "2-4 short archetype labels in plain language, e.g. 'quiet luxury', 'parisian tomboy', 'modern minimalist'. No banned words.",
+          description: "2-3 specific, evocative archetype labels. Examples: 'quiet authority', 'off-duty creative', 'European minimalist', 'old money weekend'. NOT generic labels like 'professional' or 'casual'. Lowercase. No banned words.",
         },
         colour_palette: {
           type: "array",
           items: { type: "string" },
-          description: "5-8 colours you actually wear or should lean into. Plain English: 'cream', 'oxblood', 'navy'.",
+          description: "MAXIMUM 4 colours. Use precise, evocative names — 'ink navy' not 'navy', 'clean ivory' not 'white', 'soft camel' not 'beige', 'oxblood' not 'red'. Lowercase.",
         },
         avoid_list: {
           type: "array",
           items: { type: "string" },
-          description: "3-6 specific things to avoid — silhouettes, colours, materials. Short phrases. No banned words.",
+          description: "3-5 SPECIFIC things to avoid — name the actual problem, not a vague category. 'Anything that loses the shoulder line' not 'baggy clothes'. 'High-shine synthetics' not 'cheap fabrics'. No banned words.",
         },
         body_notes: {
           type: "string",
-          description: "1-2 sentences on fit and silhouette guidance based on what you said about your body. Second person ('you', 'your'). Empty string if unclear. No banned words.",
+          description: "1-2 sentences of fit and silhouette guidance, written as a stylist's read of your shape — not a recap of what you said. Second person. Empty string if truly unclear. No banned words.",
         },
         budget_ceiling: {
           type: "integer",
