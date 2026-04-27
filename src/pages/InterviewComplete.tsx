@@ -200,6 +200,13 @@ export default function InterviewComplete() {
             <Button asChild className="mt-12 rounded-sm h-12 w-full">
               <Link to="/app/wardrobe">{copy.complete.cta}</Link>
             </Button>
+            <button
+              type="button"
+              onClick={redoInterview}
+              className="mt-4 w-full text-sm underline underline-offset-4 text-muted-foreground hover:text-foreground"
+            >
+              Redo my interview
+            </button>
           </>
         ) : null}
       </section>
