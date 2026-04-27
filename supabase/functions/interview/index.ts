@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce her style profile by calling the save_profile tool.`;
+    const userMsg = `Here is the full interview:\n\n${transcript(history as Answer[])}\n\nProduce the user's style profile by calling the save_profile tool. Address the user as "you" / "your" throughout. Do not use any of the banned words listed in the system prompt.`;
 
     const resp = await fetch(GATEWAY_URL, {
       method: "POST",
