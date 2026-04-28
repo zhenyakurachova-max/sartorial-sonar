@@ -267,7 +267,58 @@ export default function Interview() {
           </div>
         )}
 
-        {!currentFixed && (
+        {!currentFixed && currentOpen?.chips && (
+          <div className="mt-8">
+            <div className="flex flex-wrap gap-2">
+              {currentOpen.chips.options.map((opt) => {
+                const selected = openChipSelected.includes(opt);
+                return (
+                  <PillChip
+                    key={opt}
+                    label={opt}
+                    selected={selected}
+                    onClick={() => {
+                      if (currentOpen.chips!.select === "single") {
+                        setOpenChipSelected(selected ? [] : [opt]);
+                      } else {
+                        setOpenChipSelected((prev) =>
+                          selected ? prev.filter((v) => v !== opt) : [...prev, opt],
+                        );
+                      }
+                    }}
+                  />
+                );
+              })}
+              {currentOpen.chips.allowOther && (
+                <PillChip
+                  label="Other (type your own)"
+                  selected={openChipSelected.includes("__other__")}
+                  onClick={() => {
+                    const isSel = openChipSelected.includes("__other__");
+                    if (currentOpen.chips!.select === "single") {
+                      setOpenChipSelected(isSel ? [] : ["__other__"]);
+                    } else {
+                      setOpenChipSelected((prev) =>
+                        isSel ? prev.filter((v) => v !== "__other__") : [...prev, "__other__"],
+                      );
+                    }
+                  }}
+                />
+              )}
+            </div>
+            {openChipSelected.includes("__other__") && (
+              <Input
+                autoFocus
+                value={openChipOther}
+                onChange={(e) => setOpenChipOther(e.target.value)}
+                placeholder={copy.interview.otherPlaceholder}
+                className="mt-3 h-12 rounded-sm border-foreground/20 bg-transparent focus-visible:ring-primary"
+              />
+            )}
+          </div>
+        )}
+
+        {!currentFixed && !currentOpen?.chips && (
           <Textarea
             ref={taRef}
             value={draft}
