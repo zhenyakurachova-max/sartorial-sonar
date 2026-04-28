@@ -268,22 +268,38 @@ export default function Interview() {
         )}
 
         {!currentFixed && currentOpen?.chips && (
-          <div className="mt-8">
+          <div className="mt-4">
+            {currentOpen.chips.helperText && (
+              <p className="text-xs text-muted-foreground mb-4">
+                {currentOpen.chips.helperText}
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {currentOpen.chips.options.map((opt) => {
                 const selected = openChipSelected.includes(opt);
+                const max = currentOpen.chips!.maxSelect;
+                const atLimit =
+                  currentOpen.chips!.select === "multi" &&
+                  !!max &&
+                  openChipSelected.filter((v) => v !== "__other__").length >= max;
+                const disabled = !selected && atLimit && opt !== "__other__";
                 return (
                   <PillChip
                     key={opt}
                     label={opt}
                     selected={selected}
+                    disabled={disabled}
                     onClick={() => {
                       if (currentOpen.chips!.select === "single") {
                         setOpenChipSelected(selected ? [] : [opt]);
                       } else {
-                        setOpenChipSelected((prev) =>
-                          selected ? prev.filter((v) => v !== opt) : [...prev, opt],
-                        );
+                        setOpenChipSelected((prev) => {
+                          if (selected) return prev.filter((v) => v !== opt);
+                          if (max && prev.filter((v) => v !== "__other__").length >= max) {
+                            return prev;
+                          }
+                          return [...prev, opt];
+                        });
                       }
                     }}
                   />
@@ -377,16 +393,19 @@ function ChoiceChip({ label, selected, onClick }: { label: string; selected: boo
   );
 }
 
-function PillChip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+function PillChip({ label, selected, onClick, disabled }: { label: string; selected: boolean; onClick: () => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={[
         "px-4 py-2 rounded-full border text-sm transition-colors",
         selected
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-foreground/20 hover:border-foreground/50 text-foreground",
+          : disabled
+            ? "border-foreground/10 text-foreground/30 cursor-not-allowed"
+            : "border-foreground/20 hover:border-foreground/50 text-foreground",
       ].join(" ")}
     >
       {label}
