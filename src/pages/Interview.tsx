@@ -95,6 +95,15 @@ export default function Interview() {
       if (parts.some((x) => !x)) return null;
       return parts.join("\n");
     }
+    if (currentOpen?.chips) {
+      const others = openChipSelected.includes("__other__")
+        ? [openChipOther.trim()].filter(Boolean)
+        : [];
+      const picks = openChipSelected.filter((v) => v !== "__other__");
+      const all = [...picks, ...others];
+      if (all.length === 0) return null;
+      return all.join(", ");
+    }
     return draft.trim() || null;
   }
 
