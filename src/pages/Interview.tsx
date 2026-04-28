@@ -33,6 +33,8 @@ export default function Interview() {
   const [multiAnswers, setMultiAnswers] = useState<Record<string, string>>({});
   const [multiOther, setMultiOther] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState("");
+  const [openChipSelected, setOpenChipSelected] = useState<string[]>([]);
+  const [openChipOther, setOpenChipOther] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   // Hydrate
