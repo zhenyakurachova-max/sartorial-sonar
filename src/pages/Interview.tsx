@@ -270,8 +270,14 @@ export default function Interview() {
         {!currentFixed && currentOpen?.chips && (
           <div className="mt-4">
             {currentOpen.chips.helperText && (
-              <p className="text-xs text-muted-foreground mb-4">
+              <p className="text-xs text-muted-foreground -mt-2 mb-4">
                 {currentOpen.chips.helperText}
+                {currentOpen.chips.select === "multi" && currentOpen.chips.maxSelect ? (
+                  <span className="ml-2">
+                    ({openChipSelected.filter((v) => v !== "__other__").length +
+                      (openChipSelected.includes("__other__") ? 1 : 0)} of {currentOpen.chips.maxSelect} selected)
+                  </span>
+                ) : null}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
