@@ -21,6 +21,8 @@ export type OpenQuestion = {
     select: "single" | "multi";
     options: string[];
     allowOther?: boolean;
+    maxSelect?: number;
+    helperText?: string;
   };
 };
 
@@ -76,17 +78,19 @@ export const FIXED_QUESTIONS: Question[] = [
 
 export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
   // Q4
-  { kind: "open", prompt: "What's your go-to work outfit on a good day?" },
+  { kind: "open", prompt: "What do you reach for when you want to look your best?" },
   // Q5
   { kind: "open", prompt: "Name one thing in your wardrobe you love and always reach for." },
   // Q6
   { kind: "open", prompt: "Name one thing in your wardrobe you never wear." },
-  // Q7 — single-select chips + Other
+  // Q7 — multi-select chips, up to 3, + Other
   {
     kind: "open",
     prompt: "How would you describe your personal style in three words?",
     chips: {
-      select: "single",
+      select: "multi",
+      maxSelect: 3,
+      helperText: "Pick up to 3",
       options: [
         "Classic",
         "Minimal",
@@ -120,17 +124,23 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
       allowOther: false,
     },
   },
-  // Q10 — single-select chips + Other
+  // Q10 — multi-select chips, up to 2, + Other
   {
     kind: "open",
     prompt: "What do you want to feel like when you're dressed?",
     chips: {
-      select: "single",
+      select: "multi",
+      maxSelect: 2,
+      helperText: "Pick up to 2",
       options: [
-        "Confident and authoritative",
-        "Polished but relaxed",
-        "Interesting and individual",
-        "Put-together without trying too hard",
+        "In control",
+        "Confident",
+        "Relaxed",
+        "Polished",
+        "Individual",
+        "Understated",
+        "Powerful",
+        "Easy",
       ],
       allowOther: true,
     },
