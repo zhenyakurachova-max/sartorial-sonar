@@ -145,6 +145,8 @@ export default function Interview() {
     setMultiAnswers({});
     setMultiOther({});
     setDraft("");
+    setOpenChipSelected([]);
+    setOpenChipOther("");
 
     const nextIndex = currentIndex + 1;
     if (nextIndex >= TOTAL) {
