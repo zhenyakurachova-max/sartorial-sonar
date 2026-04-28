@@ -167,6 +167,8 @@ export default function Interview() {
     setMultiAnswers({});
     setMultiOther({});
     setDraft("");
+    setOpenChipSelected([]);
+    setOpenChipOther("");
     setError(null);
   };
 
