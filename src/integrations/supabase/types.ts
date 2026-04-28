@@ -80,6 +80,45 @@ export type Database = {
         }
         Relationships: []
       }
+      wardrobe_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          image_path: string
+          reason: string | null
+          status: string
+          tags: string[]
+          updated_at: string
+          user_id: string
+          verdict: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          image_path: string
+          reason?: string | null
+          status?: string
+          tags?: string[]
+          updated_at?: string
+          user_id: string
+          verdict?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          image_path?: string
+          reason?: string | null
+          status?: string
+          tags?: string[]
+          updated_at?: string
+          user_id?: string
+          verdict?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
