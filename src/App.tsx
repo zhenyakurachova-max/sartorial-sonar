@@ -11,6 +11,7 @@ import Signup from "./pages/Signup.tsx";
 import Interview from "./pages/Interview.tsx";
 import InterviewComplete from "./pages/InterviewComplete.tsx";
 import WardrobeStub from "./pages/WardrobeStub.tsx";
+import GapsStub from "./pages/GapsStub.tsx";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,10 @@ const App = () => (
             <Route
               path="/app/wardrobe"
               element={<RequireAuth><WardrobeStub /></RequireAuth>}
+            />
+            <Route
+              path="/app/gaps"
+              element={<RequireAuth><GapsStub /></RequireAuth>}
             />
             <Route path="*" element={<NotFound />} />
           </Routes>

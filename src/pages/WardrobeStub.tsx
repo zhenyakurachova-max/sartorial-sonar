@@ -106,6 +106,45 @@ export default function WardrobeStub() {
     setSubmitting(false);
   };
 
+  const runAnalysis = (itemId: string) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
+    );
+    supabase.functions
+      .invoke("analyse-item", { body: { item_id: itemId } })
+      .then(({ data, error }) => {
+        if (error || data?.error) {
+          console.error("[analyse-item]", error, data);
+          setItems((prev) =>
+            prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
+          );
+          toast({
+            title: "Couldn't analyse that photo",
+            description: data?.error ?? error?.message ?? "Tap Retry on the item to try again.",
+          });
+          return;
+        }
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === itemId
+              ? {
+                  ...it,
+                  status: "analysed",
+                  verdict: data.verdict,
+                  reason: data.reason,
+                  tags: data.tags ?? [],
+                }
+              : it,
+          ),
+        );
+      });
+  };
+
+  const onRetry = async (itemId: string) => {
+    await supabase.from("wardrobe_items").update({ status: "pending" }).eq("id", itemId);
+    runAnalysis(itemId);
+  };
+
   const onAnalyse = async () => {
     if (!user || !pendingFile || !pendingCategory) return;
     setSubmitting(true);
@@ -133,38 +172,16 @@ export default function WardrobeStub() {
       setItems((prev) => [newItem, ...prev]);
       resetAddSheet();
 
-      // Fire-and-await analysis in background (don't block UI close)
-      supabase.functions
-        .invoke("analyse-item", { body: { item_id: newItem.id } })
-        .then(({ data, error }) => {
-          if (error || data?.error) {
-            console.error("[analyse-item]", error, data);
-            setItems((prev) =>
-              prev.map((it) => (it.id === newItem.id ? { ...it, status: "failed" } : it)),
-            );
-            toast({ title: "Couldn't analyse that photo", description: data?.error ?? error?.message });
-            return;
-          }
-          setItems((prev) =>
-            prev.map((it) =>
-              it.id === newItem.id
-                ? {
-                    ...it,
-                    status: "analysed",
-                    verdict: data.verdict,
-                    reason: data.reason,
-                    tags: data.tags ?? [],
-                  }
-                : it,
-            ),
-          );
-        });
+      runAnalysis(newItem.id);
     } catch (e: any) {
       console.error("[wardrobe] add item", e);
       toast({ title: "Couldn't add that item", description: e?.message ?? "Try again." });
       setSubmitting(false);
     }
   };
+
+  const analysedCount = items.filter((i) => i.status === "analysed").length;
+  const showGapsBanner = analysedCount >= 3;
 
   const hasItems = items.length > 0;
 
@@ -218,8 +235,21 @@ export default function WardrobeStub() {
                 item={it}
                 src={urls[it.image_path]}
                 onClick={() => setDetailItem(it)}
+                onRetry={() => onRetry(it.id)}
               />
             ))}
+          </div>
+        )}
+
+        {showGapsBanner && (
+          <div className="mt-12 rounded-sm border border-border bg-muted/40 px-5 py-5 flex items-center justify-between gap-4">
+            <p className="font-serif text-lg leading-snug">Ready to see your gaps?</p>
+            <Link
+              to="/app/gaps"
+              className="shrink-0 inline-flex items-center justify-center rounded-sm bg-primary text-primary-foreground h-10 px-4 text-sm"
+            >
+              See my results
+            </Link>
           </div>
         )}
       </section>
@@ -325,6 +355,10 @@ export default function WardrobeStub() {
               item={detailItem}
               src={urls[detailItem.image_path]}
               onClose={() => setDetailItem(null)}
+              onRetry={() => {
+                onRetry(detailItem.id);
+                setDetailItem(null);
+              }}
             />
           )}
         </SheetContent>
@@ -333,37 +367,56 @@ export default function WardrobeStub() {
   );
 }
 
-function ItemTile({ item, src, onClick }: { item: Item; src?: string; onClick: () => void }) {
+function ItemTile({
+  item,
+  src,
+  onClick,
+  onRetry,
+}: {
+  item: Item;
+  src?: string;
+  onClick: () => void;
+  onRetry: () => void;
+}) {
   return (
-    <button
-      onClick={onClick}
-      className="relative aspect-square w-full overflow-hidden rounded-sm bg-muted group"
-    >
-      {src ? (
-        <img
-          src={src}
-          alt={item.category}
-          className="h-full w-full object-cover transition group-active:scale-[0.98]"
-        />
-      ) : (
-        <div className="h-full w-full bg-muted" />
-      )}
+    <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-muted group">
+      <button
+        onClick={onClick}
+        className="absolute inset-0 w-full h-full"
+        aria-label={`View ${item.category}`}
+      >
+        {src ? (
+          <img
+            src={src}
+            alt={item.category}
+            className="h-full w-full object-cover transition group-active:scale-[0.98]"
+          />
+        ) : (
+          <div className="h-full w-full bg-muted" />
+        )}
+      </button>
       {item.status === "pending" && (
-        <div className="absolute inset-0 bg-background/40 flex items-center justify-center">
+        <div className="absolute inset-0 bg-background/40 flex items-center justify-center pointer-events-none">
           <Loader2 className="h-5 w-5 animate-spin text-foreground/70" />
         </div>
       )}
       {item.status === "analysed" && item.verdict && (
-        <div className="absolute bottom-2 left-2">
+        <div className="absolute bottom-2 left-2 pointer-events-none">
           <VerdictPill verdict={item.verdict} />
         </div>
       )}
       {item.status === "failed" && (
-        <div className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-destructive text-destructive-foreground text-[11px] uppercase tracking-wider">
-          Failed
-        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry();
+          }}
+          className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
+        >
+          Retry
+        </button>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -392,10 +445,12 @@ function ItemDetail({
   item,
   src,
   onClose,
+  onRetry,
 }: {
   item: Item;
   src?: string;
   onClose: () => void;
+  onRetry: () => void;
 }) {
   return (
     <div>
@@ -426,6 +481,14 @@ function ItemDetail({
             <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" /> Analysing…
             </span>
+          )}
+          {item.status === "failed" && (
+            <button
+              onClick={onRetry}
+              className="px-3 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-xs uppercase tracking-wider font-medium"
+            >
+              Retry
+            </button>
           )}
         </div>
 

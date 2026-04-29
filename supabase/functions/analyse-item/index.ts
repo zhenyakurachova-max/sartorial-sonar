@@ -109,7 +109,21 @@ Deno.serve(async (req) => {
     const mediaType = blob.type && blob.type.startsWith("image/") ? blob.type : "image/jpeg";
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+    console.log("[analyse-item] start", {
+      itemId,
+      userId,
+      category: item.category,
+      imageBytes: buf.byteLength,
+      mediaType,
+      hasApiKey: !!apiKey,
+      apiKeyPrefix: apiKey ? apiKey.slice(0, 10) + "…" : null,
+      hasProfile: !!profile,
+    });
+    if (!apiKey) {
+      console.error("[analyse-item] ANTHROPIC_API_KEY missing in environment");
+      await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
+      return json({ error: "Stylist isn't configured yet (missing API key)." }, 500);
+    }
 
     const profileText = profile
       ? `STYLE PROFILE
@@ -154,12 +168,19 @@ Look at the photo. Decide: keep, dump, or gap. Give a one-sentence reason (max 2
 
     if (!resp.ok) {
       const text = await resp.text();
-      console.error("Anthropic error", resp.status, text);
+      console.error("[analyse-item] Anthropic error", {
+        status: resp.status,
+        statusText: resp.statusText,
+        body: text.slice(0, 2000),
+      });
       await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
       let msg = "Couldn't analyse this photo. Try again.";
-      if (resp.status === 429) msg = "Lots of requests right now. Try again in a moment.";
-      return json({ error: msg }, resp.status);
+      if (resp.status === 401 || resp.status === 403) msg = "Stylist credentials rejected. Check the API key.";
+      else if (resp.status === 429) msg = "Lots of requests right now. Try again in a moment.";
+      else if (resp.status === 400 && /credit|balance|quota/i.test(text)) msg = "Stylist is out of credit.";
+      return json({ error: msg, upstream_status: resp.status }, 200);
     }
+    console.log("[analyse-item] Anthropic ok");
 
     const data = await resp.json();
     const toolUse = Array.isArray(data?.content)
@@ -190,9 +211,13 @@ Look at the photo. Decide: keep, dump, or gap. Give a one-sentence reason (max 2
     }
 
     return json({ verdict: safeVerdict, reason, tags: safeTags });
-  } catch (e) {
-    console.error("analyse-item error", e);
-    return json({ error: "Something went wrong analysing this photo." }, 500);
+  } catch (e: any) {
+    console.error("[analyse-item] uncaught error", {
+      name: e?.name,
+      message: e?.message,
+      stack: e?.stack,
+    });
+    return json({ error: "Something went wrong analysing this photo.", detail: e?.message }, 200);
   }
 });
 
