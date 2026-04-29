@@ -81,8 +81,12 @@ Deno.serve(async (req) => {
     );
 
     const { data: userRes, error: userErr } = await supabaseAuth.auth.getUser();
-    if (userErr || !userRes?.user) return json({ error: "Not authenticated" }, 401);
+    if (userErr || !userRes?.user) {
+      console.warn("[analyse-item] auth.getUser failed", { err: userErr?.message });
+      return json({ error: "Not authenticated" }, 401);
+    }
     const userId = userRes.user.id;
+    console.log("[analyse-item] authed", { userId });
 
     const body = await req.json();
     const itemId = String(body?.item_id ?? "");
