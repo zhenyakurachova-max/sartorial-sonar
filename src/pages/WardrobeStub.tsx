@@ -235,8 +235,21 @@ export default function WardrobeStub() {
                 item={it}
                 src={urls[it.image_path]}
                 onClick={() => setDetailItem(it)}
+                onRetry={() => onRetry(it.id)}
               />
             ))}
+          </div>
+        )}
+
+        {showGapsBanner && (
+          <div className="mt-12 rounded-sm border border-border bg-muted/40 px-5 py-5 flex items-center justify-between gap-4">
+            <p className="font-serif text-lg leading-snug">Ready to see your gaps?</p>
+            <Link
+              to="/app/gaps"
+              className="shrink-0 inline-flex items-center justify-center rounded-sm bg-primary text-primary-foreground h-10 px-4 text-sm"
+            >
+              See my results
+            </Link>
           </div>
         )}
       </section>
