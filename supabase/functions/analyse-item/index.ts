@@ -109,7 +109,21 @@ Deno.serve(async (req) => {
     const mediaType = blob.type && blob.type.startsWith("image/") ? blob.type : "image/jpeg";
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+    console.log("[analyse-item] start", {
+      itemId,
+      userId,
+      category: item.category,
+      imageBytes: buf.byteLength,
+      mediaType,
+      hasApiKey: !!apiKey,
+      apiKeyPrefix: apiKey ? apiKey.slice(0, 10) + "…" : null,
+      hasProfile: !!profile,
+    });
+    if (!apiKey) {
+      console.error("[analyse-item] ANTHROPIC_API_KEY missing in environment");
+      await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
+      return json({ error: "Stylist isn't configured yet (missing API key)." }, 500);
+    }
 
     const profileText = profile
       ? `STYLE PROFILE
