@@ -106,6 +106,45 @@ export default function WardrobeStub() {
     setSubmitting(false);
   };
 
+  const runAnalysis = (itemId: string) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
+    );
+    supabase.functions
+      .invoke("analyse-item", { body: { item_id: itemId } })
+      .then(({ data, error }) => {
+        if (error || data?.error) {
+          console.error("[analyse-item]", error, data);
+          setItems((prev) =>
+            prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
+          );
+          toast({
+            title: "Couldn't analyse that photo",
+            description: data?.error ?? error?.message ?? "Tap Retry on the item to try again.",
+          });
+          return;
+        }
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === itemId
+              ? {
+                  ...it,
+                  status: "analysed",
+                  verdict: data.verdict,
+                  reason: data.reason,
+                  tags: data.tags ?? [],
+                }
+              : it,
+          ),
+        );
+      });
+  };
+
+  const onRetry = async (itemId: string) => {
+    await supabase.from("wardrobe_items").update({ status: "pending" }).eq("id", itemId);
+    runAnalysis(itemId);
+  };
+
   const onAnalyse = async () => {
     if (!user || !pendingFile || !pendingCategory) return;
     setSubmitting(true);
@@ -133,38 +172,16 @@ export default function WardrobeStub() {
       setItems((prev) => [newItem, ...prev]);
       resetAddSheet();
 
-      // Fire-and-await analysis in background (don't block UI close)
-      supabase.functions
-        .invoke("analyse-item", { body: { item_id: newItem.id } })
-        .then(({ data, error }) => {
-          if (error || data?.error) {
-            console.error("[analyse-item]", error, data);
-            setItems((prev) =>
-              prev.map((it) => (it.id === newItem.id ? { ...it, status: "failed" } : it)),
-            );
-            toast({ title: "Couldn't analyse that photo", description: data?.error ?? error?.message });
-            return;
-          }
-          setItems((prev) =>
-            prev.map((it) =>
-              it.id === newItem.id
-                ? {
-                    ...it,
-                    status: "analysed",
-                    verdict: data.verdict,
-                    reason: data.reason,
-                    tags: data.tags ?? [],
-                  }
-                : it,
-            ),
-          );
-        });
+      runAnalysis(newItem.id);
     } catch (e: any) {
       console.error("[wardrobe] add item", e);
       toast({ title: "Couldn't add that item", description: e?.message ?? "Try again." });
       setSubmitting(false);
     }
   };
+
+  const analysedCount = items.filter((i) => i.status === "analysed").length;
+  const showGapsBanner = analysedCount >= 3;
 
   const hasItems = items.length > 0;
 
