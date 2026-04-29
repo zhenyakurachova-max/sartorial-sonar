@@ -363,37 +363,56 @@ export default function WardrobeStub() {
   );
 }
 
-function ItemTile({ item, src, onClick }: { item: Item; src?: string; onClick: () => void }) {
+function ItemTile({
+  item,
+  src,
+  onClick,
+  onRetry,
+}: {
+  item: Item;
+  src?: string;
+  onClick: () => void;
+  onRetry: () => void;
+}) {
   return (
-    <button
-      onClick={onClick}
-      className="relative aspect-square w-full overflow-hidden rounded-sm bg-muted group"
-    >
-      {src ? (
-        <img
-          src={src}
-          alt={item.category}
-          className="h-full w-full object-cover transition group-active:scale-[0.98]"
-        />
-      ) : (
-        <div className="h-full w-full bg-muted" />
-      )}
+    <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-muted group">
+      <button
+        onClick={onClick}
+        className="absolute inset-0 w-full h-full"
+        aria-label={`View ${item.category}`}
+      >
+        {src ? (
+          <img
+            src={src}
+            alt={item.category}
+            className="h-full w-full object-cover transition group-active:scale-[0.98]"
+          />
+        ) : (
+          <div className="h-full w-full bg-muted" />
+        )}
+      </button>
       {item.status === "pending" && (
-        <div className="absolute inset-0 bg-background/40 flex items-center justify-center">
+        <div className="absolute inset-0 bg-background/40 flex items-center justify-center pointer-events-none">
           <Loader2 className="h-5 w-5 animate-spin text-foreground/70" />
         </div>
       )}
       {item.status === "analysed" && item.verdict && (
-        <div className="absolute bottom-2 left-2">
+        <div className="absolute bottom-2 left-2 pointer-events-none">
           <VerdictPill verdict={item.verdict} />
         </div>
       )}
       {item.status === "failed" && (
-        <div className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-destructive text-destructive-foreground text-[11px] uppercase tracking-wider">
-          Failed
-        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry();
+          }}
+          className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
+        >
+          Retry
+        </button>
       )}
-    </button>
+    </div>
   );
 }
 
