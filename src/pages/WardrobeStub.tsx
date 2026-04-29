@@ -445,10 +445,12 @@ function ItemDetail({
   item,
   src,
   onClose,
+  onRetry,
 }: {
   item: Item;
   src?: string;
   onClose: () => void;
+  onRetry: () => void;
 }) {
   return (
     <div>
@@ -479,6 +481,14 @@ function ItemDetail({
             <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" /> Analysing…
             </span>
+          )}
+          {item.status === "failed" && (
+            <button
+              onClick={onRetry}
+              className="px-3 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-xs uppercase tracking-wider font-medium"
+            >
+              Retry
+            </button>
           )}
         </div>
 
