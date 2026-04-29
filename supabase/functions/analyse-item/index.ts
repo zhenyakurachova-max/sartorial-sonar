@@ -168,12 +168,19 @@ Look at the photo. Decide: keep, dump, or gap. Give a one-sentence reason (max 2
 
     if (!resp.ok) {
       const text = await resp.text();
-      console.error("Anthropic error", resp.status, text);
+      console.error("[analyse-item] Anthropic error", {
+        status: resp.status,
+        statusText: resp.statusText,
+        body: text.slice(0, 2000),
+      });
       await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
       let msg = "Couldn't analyse this photo. Try again.";
-      if (resp.status === 429) msg = "Lots of requests right now. Try again in a moment.";
-      return json({ error: msg }, resp.status);
+      if (resp.status === 401 || resp.status === 403) msg = "Stylist credentials rejected. Check the API key.";
+      else if (resp.status === 429) msg = "Lots of requests right now. Try again in a moment.";
+      else if (resp.status === 400 && /credit|balance|quota/i.test(text)) msg = "Stylist is out of credit.";
+      return json({ error: msg, upstream_status: resp.status }, 200);
     }
+    console.log("[analyse-item] Anthropic ok");
 
     const data = await resp.json();
     const toolUse = Array.isArray(data?.content)
