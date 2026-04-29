@@ -54,9 +54,19 @@ const TOOL = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  console.log("[analyse-item] invoked", {
+    method: req.method,
+    hasAuth: !!req.headers.get("Authorization"),
+    hasUrl: !!Deno.env.get("SUPABASE_URL"),
+    hasService: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    hasAnon: !!Deno.env.get("SUPABASE_ANON_KEY"),
+    hasAnthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
+  });
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      console.warn("[analyse-item] missing Authorization header");
       return json({ error: "Not authenticated" }, 401);
     }
 
@@ -71,8 +81,12 @@ Deno.serve(async (req) => {
     );
 
     const { data: userRes, error: userErr } = await supabaseAuth.auth.getUser();
-    if (userErr || !userRes?.user) return json({ error: "Not authenticated" }, 401);
+    if (userErr || !userRes?.user) {
+      console.warn("[analyse-item] auth.getUser failed", { err: userErr?.message });
+      return json({ error: "Not authenticated" }, 401);
+    }
     const userId = userRes.user.id;
+    console.log("[analyse-item] authed", { userId });
 
     const body = await req.json();
     const itemId = String(body?.item_id ?? "");
