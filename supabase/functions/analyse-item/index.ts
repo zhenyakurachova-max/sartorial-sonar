@@ -211,9 +211,13 @@ Look at the photo. Decide: keep, dump, or gap. Give a one-sentence reason (max 2
     }
 
     return json({ verdict: safeVerdict, reason, tags: safeTags });
-  } catch (e) {
-    console.error("analyse-item error", e);
-    return json({ error: "Something went wrong analysing this photo." }, 500);
+  } catch (e: any) {
+    console.error("[analyse-item] uncaught error", {
+      name: e?.name,
+      message: e?.message,
+      stack: e?.stack,
+    });
+    return json({ error: "Something went wrong analysing this photo.", detail: e?.message }, 200);
   }
 });
 
