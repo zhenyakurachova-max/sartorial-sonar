@@ -355,6 +355,10 @@ export default function WardrobeStub() {
               item={detailItem}
               src={urls[detailItem.image_path]}
               onClose={() => setDetailItem(null)}
+              onRetry={() => {
+                onRetry(detailItem.id);
+                setDetailItem(null);
+              }}
             />
           )}
         </SheetContent>
