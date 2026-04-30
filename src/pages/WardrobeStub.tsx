@@ -146,21 +146,19 @@ export default function WardrobeStub() {
       return;
     }
 
-    {
-        setItems((prev) =>
-          prev.map((it) =>
-            it.id === itemId
-              ? {
-                  ...it,
-                  status: "analysed",
-                  verdict: data.verdict,
-                  reason: data.reason,
-                  tags: data.tags ?? [],
-                }
-              : it,
-          ),
-        );
-      });
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              status: "analysed",
+              verdict: data.verdict,
+              reason: data.reason,
+              tags: data.tags ?? [],
+            }
+          : it,
+      ),
+    );
   };
 
   const onRetry = async (itemId: string) => {
