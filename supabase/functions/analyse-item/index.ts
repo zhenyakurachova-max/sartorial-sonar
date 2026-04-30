@@ -1,243 +1,78 @@
-// Atelier analyse-item edge function.
-// Takes an uploaded wardrobe photo + the user's style profile and returns
-// a verdict (keep/dump/gap), a one-line reason, and a few tags via Claude vision.
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-3-5-sonnet-20240620";
-
-const SYSTEM = `You are an experienced personal stylist looking at a single garment a client has just photographed from her wardrobe. You already know her style profile. Your job is to give a fast, honest professional read.
-
-VOICE
-- Second person: "you", "your". Never "she" / "her".
-- Plain, direct, confident. No exclamation marks. No fashion-magazine fluff.
-- Sound like a sharp friend with great taste, not a brochure.
-
-VERDICT — pick exactly one
-- "keep": the piece serves your style profile. It earns its hanger.
-- "dump": the piece works against your style profile. Let it go.
-- "gap": the piece is fine in itself, but it shows what's MISSING from your wardrobe — flag the gap it points to.
-
-REASON
-- ONE sentence. Maximum 20 words. Specific. Names a real reason — silhouette, fabric, colour, line, role in the wardrobe.
-- Do NOT use these words: effortless, chic, elevate, elevated, timeless, versatile, seamless, fashion-forward, curated, polished, sophisticated, on-trend, must-have, statement piece, capsule, staple.
-
-TAGS
-- 2-4 short lowercase tags. Examples: "structured shoulder", "ink navy", "wool blend", "wide leg", "cropped", "high-shine".
-- Concrete attributes only — no vague adjectives.`;
-
-const TOOL = {
-  name: "save_verdict",
-  description: "Save the stylist's read of this single wardrobe item.",
-  input_schema: {
-    type: "object",
-    properties: {
-      verdict: { type: "string", enum: ["keep", "dump", "gap"] },
-      reason: { type: "string", description: "ONE sentence, max 20 words. Second person." },
-      tags: {
-        type: "array",
-        items: { type: "string" },
-        description: "2-4 short concrete tags, lowercase.",
-      },
-    },
-    required: ["verdict", "reason", "tags"],
-    additionalProperties: false,
-  },
-};
-
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  };
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
-  console.log("[analyse-item] invoked", {
-    method: req.method,
-    hasAuth: !!req.headers.get("Authorization"),
-    hasUrl: !!Deno.env.get("SUPABASE_URL"),
-    hasService: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-    hasAnon: !!Deno.env.get("SUPABASE_ANON_KEY"),
-    hasAnthropic: !!Deno.env.get("ANTHROPIC_API_KEY"),
-  });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      console.warn("[analyse-item] missing Authorization header");
-      return json({ error: "Not authenticated" }, 401);
-    }
+    if (!authHeader) return new Response(JSON.stringify({ error: "No auth" }), { status: 401, headers: corsHeaders });
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const supabaseAuth = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
 
-    const { data: userRes, error: userErr } = await supabaseAuth.auth.getUser();
-    if (userErr || !userRes?.user) {
-      console.warn("[analyse-item] auth.getUser failed", { err: userErr?.message });
-      return json({ error: "Not authenticated" }, 401);
-    }
-    const userId = userRes.user.id;
-    console.log("[analyse-item] authed", { userId });
+    const { item_id } = await req.json();
+    console.log("Analysing item:", item_id, "for user:", user.id);
 
-    const body = await req.json();
-    const itemId = String(body?.item_id ?? "");
-    if (!itemId) return json({ error: "Missing item_id" }, 400);
+    const { data: item, error: itemError } = await supabase.from("wardrobe_items").select("*").eq("id", item_id).eq("user_id", user.id).single();
+    if (itemError || !item) { console.error("Item error:", itemError); return new Response(JSON.stringify({ error: "Item not found" }), { status: 404, headers: corsHeaders }); }
 
-    // Fetch the item (must belong to user)
-    const { data: item, error: itemErr } = await supabase
-      .from("wardrobe_items")
-      .select("id, user_id, image_path, category")
-      .eq("id", itemId)
-      .maybeSingle();
-    if (itemErr || !item || item.user_id !== userId) {
-      return json({ error: "Item not found" }, 404);
-    }
+    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    console.log("Profile found:", !!profile);
 
-    // Fetch profile for context
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("style_summary, colour_palette, style_archetypes, avoid_list, body_notes, budget_ceiling")
-      .eq("id", userId)
-      .maybeSingle();
+    const { data: imageData, error: downloadError } = await supabase.storage.from("wardrobe").download(item.image_path);
+    if (downloadError) { console.error("Download error:", downloadError); return new Response(JSON.stringify({ error: "Could not download image: " + downloadError.message }), { status: 500, headers: corsHeaders }); }
 
-    // Download the image bytes
-    const { data: blob, error: dlErr } = await supabase.storage.from("wardrobe").download(item.image_path);
-    if (dlErr || !blob) {
-      console.error("download error", dlErr);
-      return json({ error: "Couldn't read photo" }, 500);
-    }
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    // Base64 encode
-    let binary = "";
-    for (let i = 0; i < buf.byteLength; i++) binary += String.fromCharCode(buf[i]);
-    const base64 = btoa(binary);
-    const mediaType = blob.type && blob.type.startsWith("image/") ? blob.type : "image/jpeg";
+    const arrayBuffer = await imageData.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    console.log("Image encoded, size:", base64.length);
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    console.log("[analyse-item] start", {
-      itemId,
-      userId,
-      category: item.category,
-      imageBytes: buf.byteLength,
-      mediaType,
-      hasApiKey: !!apiKey,
-      apiKeyPrefix: apiKey ? apiKey.slice(0, 10) + "…" : null,
-      hasProfile: !!profile,
-    });
-    if (!apiKey) {
-      console.error("[analyse-item] ANTHROPIC_API_KEY missing in environment");
-      await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
-      return json({ error: "Stylist isn't configured yet (missing API key)." }, 500);
-    }
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!anthropicKey) { console.error("No ANTHROPIC_API_KEY"); return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: corsHeaders }); }
 
-    const profileText = profile
-      ? `STYLE PROFILE
-Summary: ${profile.style_summary ?? "—"}
-Archetypes: ${(profile.style_archetypes ?? []).join(", ") || "—"}
-Palette: ${(profile.colour_palette ?? []).join(", ") || "—"}
-Avoid: ${(profile.avoid_list ?? []).join("; ") || "—"}
-Body notes: ${profile.body_notes ?? "—"}
-Budget ceiling (EUR/piece): ${profile.budget_ceiling ?? "—"}`
-      : "No style profile yet — judge on general principles of cut, fabric, colour.";
+    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}.
 
-    const userText = `${profileText}
+Assess the clothing item in the photo. Return ONLY valid JSON, no markdown, no explanation:
+{ "verdict": "keep", "reason": "one sentence max 20 words", "tags": ["tag1", "tag2"] }
 
-This item's category (as the user labelled it): ${item.category}
+verdict must be exactly one of: keep, dump, gap
+- keep: fits her profile and is good quality
+- dump: wrong for her style or poor quality  
+- gap: good item but she needs more like this`;
 
-Look at the photo. Decide: keep, dump, or gap. Give a one-sentence reason (max 20 words) and 2-4 concrete tags. Call the save_verdict tool.`;
-
-    const resp = await fetch(ANTHROPIC_URL, {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        system: SYSTEM,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-              { type: "text", text: userText },
-            ],
-          },
-        ],
-        tools: [TOOL],
-        tool_choice: { type: "tool", name: "save_verdict" },
-      }),
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.error("[analyse-item] Anthropic error", {
-        status: resp.status,
-        statusText: resp.statusText,
-        body: text.slice(0, 2000),
-      });
-      await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
-      let msg = "Couldn't analyse this photo. Try again.";
-      if (resp.status === 401 || resp.status === 403) msg = "Stylist credentials rejected. Check the API key.";
-      else if (resp.status === 429) msg = "Lots of requests right now. Try again in a moment.";
-      else if (resp.status === 400 && /credit|balance|quota/i.test(text)) msg = "Stylist is out of credit.";
-      return json({ error: msg, upstream_status: resp.status }, 200);
-    }
-    console.log("[analyse-item] Anthropic ok");
-
-    const data = await resp.json();
-    const toolUse = Array.isArray(data?.content)
-      ? data.content.find((b: any) => b.type === "tool_use")
-      : null;
-    if (!toolUse?.input) {
-      console.error("No tool_use", JSON.stringify(data));
-      await supabase.from("wardrobe_items").update({ status: "failed" }).eq("id", itemId);
-      return json({ error: "Couldn't read the result" }, 500);
-    }
-
-    const { verdict, reason, tags } = toolUse.input;
-    const safeVerdict = ["keep", "dump", "gap"].includes(verdict) ? verdict : "keep";
-    const safeTags = Array.isArray(tags) ? tags.slice(0, 6).map((t: any) => String(t)) : [];
-
-    const { error: upErr } = await supabase
-      .from("wardrobe_items")
-      .update({
-        status: "analysed",
-        verdict: safeVerdict,
-        reason: String(reason ?? "").slice(0, 240),
-        tags: safeTags,
+        model: "claude-sonnet-4-6",
+        max_tokens: 256,
+        system: systemPrompt,
+        messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } }, { type: "text", text: `Category: ${item.category}. Give verdict.` }] }]
       })
-      .eq("id", itemId);
-    if (upErr) {
-      console.error("update item error", upErr);
-      return json({ error: "Couldn't save the result" }, 500);
-    }
-
-    return json({ verdict: safeVerdict, reason, tags: safeTags });
-  } catch (e: any) {
-    console.error("[analyse-item] uncaught error", {
-      name: e?.name,
-      message: e?.message,
-      stack: e?.stack,
     });
-    return json({ error: "Something went wrong analysing this photo.", detail: e?.message }, 200);
+
+    const anthropicData = await response.json();
+    console.log("Anthropic status:", response.status, "response:", JSON.stringify(anthropicData));
+
+    if (!response.ok) return new Response(JSON.stringify({ error: "Claude error: " + JSON.stringify(anthropicData) }), { status: 500, headers: corsHeaders });
+
+    const text = anthropicData.content?.[0]?.text;
+    if (!text) return new Response(JSON.stringify({ error: "No text in response" }), { status: 500, headers: corsHeaders });
+
+    const result = JSON.parse(text);
+    console.log("Result:", result);
+
+    await supabase.from("wardrobe_items").update({ verdict: result.verdict, reason: result.reason, tags: result.tags, analysed_at: new Date().toISOString(), status: "analysed" }).eq("id", item_id);
+
+    return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  } catch (e) {
+    console.error("Function error:", String(e));
+    return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: corsHeaders });
   }
 });
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
