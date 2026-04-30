@@ -24,8 +24,25 @@ type Item = {
   created_at: string;
 };
 
+type AnalysisResult = {
+  verdict?: Verdict;
+  reason?: string | null;
+  tags?: string[] | null;
+  error?: unknown;
+};
+
 const CATEGORIES = ["Top", "Bottom", "Dress", "Outerwear", "Shoes", "Bag", "Accessory"] as const;
 type Category = (typeof CATEGORIES)[number];
+
+const ANALYSIS_TIMEOUT_MS = 30_000;
+
+const isVerdict = (value: unknown): value is Verdict =>
+  value === "keep" || value === "dump" || value === "gap";
+
+const analysisTimeout = () =>
+  new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error("Analysis timed out after 30 seconds.")), ANALYSIS_TIMEOUT_MS);
+  });
 
 export default function WardrobeStub() {
   const { user, signOut } = useAuth();
@@ -110,9 +127,23 @@ export default function WardrobeStub() {
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
     );
-    const { data, error } = await supabase.functions.invoke("analyse-item", {
-      body: { item_id: itemId },
-    });
+    setDetailItem((current) => (current?.id === itemId ? { ...current, status: "pending" } : current));
+
+    let data: AnalysisResult | null = null;
+    let error: any = null;
+
+    try {
+      const response = await Promise.race([
+        supabase.functions.invoke("analyse-item", {
+          body: { item_id: itemId },
+        }),
+        analysisTimeout(),
+      ]);
+      data = (response.data ?? null) as AnalysisResult | null;
+      error = response.error;
+    } catch (e: any) {
+      error = e;
+    }
 
     let errMessage: string | null = null;
     if (error) {
@@ -132,6 +163,8 @@ export default function WardrobeStub() {
       }
     } else if (data?.error) {
       errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+    } else if (!isVerdict(data?.verdict)) {
+      errMessage = "Analysis returned no verdict.";
     }
 
     if (errMessage) {
@@ -139,6 +172,7 @@ export default function WardrobeStub() {
       setItems((prev) =>
         prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
       );
+      setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" } : current));
       toast({
         title: "Couldn't analyse that photo",
         description: errMessage,
@@ -152,12 +186,23 @@ export default function WardrobeStub() {
           ? {
               ...it,
               status: "analysed",
-              verdict: data.verdict,
-              reason: data.reason,
-              tags: data.tags ?? [],
+              verdict: data!.verdict!,
+              reason: data!.reason ?? null,
+              tags: data!.tags ?? [],
             }
           : it,
       ),
+    );
+    setDetailItem((current) =>
+      current?.id === itemId
+        ? {
+            ...current,
+            status: "analysed",
+            verdict: data!.verdict!,
+            reason: data!.reason ?? null,
+            tags: data!.tags ?? [],
+          }
+        : current,
     );
   };
 
