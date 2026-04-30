@@ -106,38 +106,59 @@ export default function WardrobeStub() {
     setSubmitting(false);
   };
 
-  const runAnalysis = (itemId: string) => {
+  const runAnalysis = async (itemId: string) => {
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
     );
-    supabase.functions
-      .invoke("analyse-item", { body: { item_id: itemId } })
-      .then(({ data, error }) => {
-        if (error || data?.error) {
-          console.error("[analyse-item]", error, data);
-          setItems((prev) =>
-            prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
-          );
-          toast({
-            title: "Couldn't analyse that photo",
-            description: data?.error ?? error?.message ?? "Tap Retry on the item to try again.",
-          });
-          return;
+    const { data, error } = await supabase.functions.invoke("analyse-item", {
+      body: { item_id: itemId },
+    });
+
+    let errMessage: string | null = null;
+    if (error) {
+      // FunctionsHttpError: read the actual response body for the real error
+      try {
+        const ctx = (error as any).context;
+        if (ctx && typeof ctx.json === "function") {
+          const body = await ctx.json();
+          errMessage = body?.error ?? JSON.stringify(body);
+        } else if (ctx && typeof ctx.text === "function") {
+          errMessage = await ctx.text();
+        } else {
+          errMessage = error.message;
         }
-        setItems((prev) =>
-          prev.map((it) =>
-            it.id === itemId
-              ? {
-                  ...it,
-                  status: "analysed",
-                  verdict: data.verdict,
-                  reason: data.reason,
-                  tags: data.tags ?? [],
-                }
-              : it,
-          ),
-        );
+      } catch {
+        errMessage = error.message;
+      }
+    } else if (data?.error) {
+      errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+    }
+
+    if (errMessage) {
+      console.error("[analyse-item]", errMessage);
+      setItems((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
+      );
+      toast({
+        title: "Couldn't analyse that photo",
+        description: errMessage,
       });
+      return;
+    }
+
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              status: "analysed",
+              verdict: data.verdict,
+              reason: data.reason,
+              tags: data.tags ?? [],
+            }
+          : it,
+      ),
+    );
   };
 
   const onRetry = async (itemId: string) => {

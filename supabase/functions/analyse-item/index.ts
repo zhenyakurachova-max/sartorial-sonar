@@ -29,8 +29,15 @@ Deno.serve(async (req: Request) => {
     if (downloadError) { console.error("Download error:", downloadError); return new Response(JSON.stringify({ error: "Could not download image: " + downloadError.message }), { status: 500, headers: corsHeaders }); }
 
     const arrayBuffer = await imageData.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    console.log("Image encoded, size:", base64.length);
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+    }
+    const base64 = btoa(binary);
+    const mediaType = (imageData.type && imageData.type.startsWith("image/")) ? imageData.type : "image/jpeg";
+    console.log("Image encoded, size:", base64.length, "type:", mediaType);
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) { console.error("No ANTHROPIC_API_KEY"); return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: corsHeaders }); }
@@ -52,7 +59,7 @@ verdict must be exactly one of: keep, dump, gap
         model: "claude-sonnet-4-6",
         max_tokens: 256,
         system: systemPrompt,
-        messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } }, { type: "text", text: `Category: ${item.category}. Give verdict.` }] }]
+        messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: `Category: ${item.category}. Give verdict.` }] }]
       })
     });
 
