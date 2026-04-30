@@ -124,6 +124,7 @@ export default function WardrobeStub() {
   };
 
   const runAnalysis = async (itemId: string) => {
+    console.log("[analyse-item] invoking for item:", itemId);
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
     );
@@ -131,23 +132,30 @@ export default function WardrobeStub() {
 
     let data: AnalysisResult | null = null;
     let error: any = null;
+    let timedOut = false;
 
     try {
-      const response = await Promise.race([
+      const response: any = await Promise.race([
         supabase.functions.invoke("analyse-item", {
           body: { item_id: itemId },
         }),
-        analysisTimeout(),
+        analysisTimeout().catch((e) => {
+          timedOut = true;
+          throw e;
+        }),
       ]);
-      data = (response.data ?? null) as AnalysisResult | null;
-      error = response.error;
+      console.log("[analyse-item] raw response:", response);
+      data = (response?.data ?? null) as AnalysisResult | null;
+      error = response?.error ?? null;
     } catch (e: any) {
+      console.error("[analyse-item] threw:", e);
       error = e;
     }
 
+    console.log("[analyse-item] parsed data:", data, "error:", error);
+
     let errMessage: string | null = null;
     if (error) {
-      // FunctionsHttpError: read the actual response body for the real error
       try {
         const ctx = (error as any).context;
         if (ctx && typeof ctx.json === "function") {
@@ -156,19 +164,33 @@ export default function WardrobeStub() {
         } else if (ctx && typeof ctx.text === "function") {
           errMessage = await ctx.text();
         } else {
-          errMessage = error.message;
+          errMessage = error.message ?? String(error);
         }
       } catch {
-        errMessage = error.message;
+        errMessage = error.message ?? String(error);
       }
     } else if (data?.error) {
       errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
     } else if (!isVerdict(data?.verdict)) {
-      errMessage = "Analysis returned no verdict.";
+      // Fallback: re-fetch the item from DB in case the function wrote results but
+      // the response payload shape was unexpected.
+      const { data: refreshed } = await supabase
+        .from("wardrobe_items")
+        .select("id, image_path, category, status, verdict, reason, tags, created_at")
+        .eq("id", itemId)
+        .single();
+      if (refreshed && refreshed.status === "analysed" && isVerdict(refreshed.verdict)) {
+        console.log("[analyse-item] recovered from DB:", refreshed);
+        const fresh = refreshed as Item;
+        setItems((prev) => prev.map((it) => (it.id === itemId ? fresh : it)));
+        setDetailItem((current) => (current?.id === itemId ? fresh : current));
+        return;
+      }
+      errMessage = timedOut ? "Analysis timed out after 30 seconds." : "Analysis returned no verdict.";
     }
 
     if (errMessage) {
-      console.error("[analyse-item]", errMessage);
+      console.error("[analyse-item] failed:", errMessage);
       setItems((prev) =>
         prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
       );
@@ -180,28 +202,21 @@ export default function WardrobeStub() {
       return;
     }
 
+    const verdict = data!.verdict!;
+    const reason = data!.reason ?? null;
+    const tags = data!.tags ?? [];
+    console.log("[analyse-item] success — updating UI:", { itemId, verdict });
+
     setItems((prev) =>
       prev.map((it) =>
         it.id === itemId
-          ? {
-              ...it,
-              status: "analysed",
-              verdict: data!.verdict!,
-              reason: data!.reason ?? null,
-              tags: data!.tags ?? [],
-            }
+          ? { ...it, status: "analysed", verdict, reason, tags }
           : it,
       ),
     );
     setDetailItem((current) =>
       current?.id === itemId
-        ? {
-            ...current,
-            status: "analysed",
-            verdict: data!.verdict!,
-            reason: data!.reason ?? null,
-            tags: data!.tags ?? [],
-          }
+        ? { ...current, status: "analysed", verdict, reason, tags }
         : current,
     );
   };
