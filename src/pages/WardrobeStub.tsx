@@ -205,12 +205,6 @@ export default function WardrobeStub() {
         : current,
     );
   };
-              tags: data.tags ?? [],
-            }
-          : it,
-      ),
-    );
-  };
 
   const onRetry = async (itemId: string) => {
     await supabase.from("wardrobe_items").update({ status: "pending" }).eq("id", itemId);
