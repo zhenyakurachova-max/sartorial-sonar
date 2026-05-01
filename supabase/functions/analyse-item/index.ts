@@ -42,21 +42,23 @@ Deno.serve(async (req: Request) => {
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) { console.error("No ANTHROPIC_API_KEY"); return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: corsHeaders }); }
 
-    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}.
+    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}. Body proportions: ${profile?.proportions || "not specified"}. Body notes: ${profile?.body_notes || "none"}.
+
+Take her proportions into account when judging fit, hem length, rise, and silhouette.
 
 Assess the clothing item in the photo. Return ONLY valid JSON, no markdown, no explanation:
 { "verdict": "keep", "reason": "one sentence max 20 words", "tags": ["tag1", "tag2"] }
 
 verdict must be exactly one of: keep, dump, gap
 - keep: fits her profile and is good quality
-- dump: wrong for her style or poor quality  
+- dump: wrong for her style or poor quality
 - gap: good item but she needs more like this`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-5",
         max_tokens: 256,
         system: systemPrompt,
         messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: `Category: ${item.category}. Give verdict.` }] }]
@@ -64,22 +66,24 @@ verdict must be exactly one of: keep, dump, gap
     });
 
     const anthropicData = await response.json();
-    console.log("Anthropic status:", response.status, "response:", JSON.stringify(anthropicData));
+    console.log("Anthropic status:", response.status, "response:", JSON.stringify(anthropicData).slice(0, 500));
 
     if (!response.ok) return new Response(JSON.stringify({ error: "Claude error: " + JSON.stringify(anthropicData) }), { status: 500, headers: corsHeaders });
 
     const text = anthropicData.content?.[0]?.text;
     if (!text) return new Response(JSON.stringify({ error: "No text in response" }), { status: 500, headers: corsHeaders });
 
-    const result = JSON.parse(text);
+    // Strip markdown fences if model wraps JSON
+    const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const result = JSON.parse(cleaned);
     console.log("Result:", result);
 
-    await supabase.from("wardrobe_items").update({ verdict: result.verdict, reason: result.reason, tags: result.tags, analysed_at: new Date().toISOString(), status: "analysed" }).eq("id", item_id);
+    await supabase.from("wardrobe_items").update({ verdict: result.verdict, reason: result.reason, tags: result.tags, status: "analysed" }).eq("id", item_id);
 
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e) {
     console.error("Function error:", String(e));
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

@@ -12,6 +12,7 @@ type Profile = {
   style_archetypes: string[];
   avoid_list: string[];
   budget_ceiling: number | null;
+  proportions: string | null;
   interview_complete: boolean;
 };
 
@@ -31,7 +32,7 @@ export default function InterviewComplete() {
       // 1. Check if profile already complete.
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
-        .select("style_summary, colour_palette, style_archetypes, avoid_list, budget_ceiling, interview_complete")
+        .select("style_summary, colour_palette, style_archetypes, avoid_list, budget_ceiling, proportions, interview_complete")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled) return;
@@ -53,7 +54,7 @@ export default function InterviewComplete() {
       if (ansErr) console.error("[complete] answers fetch", ansErr);
 
       const history = (ans ?? []) as StoredAnswer[];
-      if (history.length < 10) {
+      if (history.length < 11) {
         setPhase("redirect");
         return;
       }
@@ -79,6 +80,7 @@ export default function InterviewComplete() {
           style_archetypes: p.style_archetypes ?? [],
           avoid_list: p.avoid_list ?? [],
           body_notes: p.body_notes ?? null,
+          proportions: p.proportions ?? null,
           budget_ceiling: p.budget_ceiling ?? null,
           interview_complete: true,
         })
@@ -97,6 +99,7 @@ export default function InterviewComplete() {
         style_archetypes: p.style_archetypes ?? [],
         avoid_list: p.avoid_list ?? [],
         budget_ceiling: p.budget_ceiling ?? null,
+        proportions: p.proportions ?? null,
         interview_complete: true,
       });
       setPhase("ready");
@@ -128,6 +131,7 @@ export default function InterviewComplete() {
         style_archetypes: [],
         avoid_list: [],
         body_notes: null,
+        proportions: null,
         budget_ceiling: null,
         interview_complete: false,
       })

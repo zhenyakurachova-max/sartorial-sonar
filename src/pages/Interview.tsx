@@ -14,7 +14,7 @@ import {
   type Question,
 } from "@/lib/interview-questions";
 
-const TOTAL = 10;
+const TOTAL = 11;
 
 type StoredAnswer = { question_index: number; question: string; answer: string };
 
@@ -183,7 +183,7 @@ export default function Interview() {
             {copy.interview.progress(Math.min(currentIndex + 1, TOTAL), TOTAL)}
           </span>
         </div>
-        <Progress value={progress} className="mt-4 h-px bg-border" />
+        <Progress value={progress} className="mt-4 h-1 bg-muted [&>div]:bg-primary" />
       </header>
 
       <section className="flex-1 px-6 pt-12 pb-10 max-w-md mx-auto w-full">
@@ -274,8 +274,7 @@ export default function Interview() {
                 {currentOpen.chips.helperText}
                 {currentOpen.chips.select === "multi" && currentOpen.chips.maxSelect ? (
                   <span className="ml-2">
-                    ({openChipSelected.filter((v) => v !== "__other__").length +
-                      (openChipSelected.includes("__other__") ? 1 : 0)} of {currentOpen.chips.maxSelect} selected)
+                    ({openChipSelected.length} of {currentOpen.chips.maxSelect} selected)
                   </span>
                 ) : null}
               </p>
@@ -284,11 +283,10 @@ export default function Interview() {
               {currentOpen.chips.options.map((opt) => {
                 const selected = openChipSelected.includes(opt);
                 const max = currentOpen.chips!.maxSelect;
+                const totalSelected = openChipSelected.length;
                 const atLimit =
-                  currentOpen.chips!.select === "multi" &&
-                  !!max &&
-                  openChipSelected.filter((v) => v !== "__other__").length >= max;
-                const disabled = !selected && atLimit && opt !== "__other__";
+                  currentOpen.chips!.select === "multi" && !!max && totalSelected >= max;
+                const disabled = !selected && atLimit;
                 return (
                   <PillChip
                     key={opt}
@@ -301,9 +299,7 @@ export default function Interview() {
                       } else {
                         setOpenChipSelected((prev) => {
                           if (selected) return prev.filter((v) => v !== opt);
-                          if (max && prev.filter((v) => v !== "__other__").length >= max) {
-                            return prev;
-                          }
+                          if (max && prev.length >= max) return prev;
                           return [...prev, opt];
                         });
                       }
@@ -311,22 +307,31 @@ export default function Interview() {
                   />
                 );
               })}
-              {currentOpen.chips.allowOther && (
-                <PillChip
-                  label="Other (type your own)"
-                  selected={openChipSelected.includes("__other__")}
-                  onClick={() => {
-                    const isSel = openChipSelected.includes("__other__");
-                    if (currentOpen.chips!.select === "single") {
-                      setOpenChipSelected(isSel ? [] : ["__other__"]);
-                    } else {
-                      setOpenChipSelected((prev) =>
-                        isSel ? prev.filter((v) => v !== "__other__") : [...prev, "__other__"],
-                      );
-                    }
-                  }}
-                />
-              )}
+              {currentOpen.chips.allowOther && (() => {
+                const isSel = openChipSelected.includes("__other__");
+                const max = currentOpen.chips!.maxSelect;
+                const atLimit =
+                  currentOpen.chips!.select === "multi" && !!max && openChipSelected.length >= max;
+                const disabled = !isSel && atLimit;
+                return (
+                  <PillChip
+                    label="Other (type your own)"
+                    selected={isSel}
+                    disabled={disabled}
+                    onClick={() => {
+                      if (currentOpen.chips!.select === "single") {
+                        setOpenChipSelected(isSel ? [] : ["__other__"]);
+                      } else {
+                        setOpenChipSelected((prev) => {
+                          if (isSel) return prev.filter((v) => v !== "__other__");
+                          if (max && prev.length >= max) return prev;
+                          return [...prev, "__other__"];
+                        });
+                      }
+                    }}
+                  />
+                );
+              })()}
             </div>
             {openChipSelected.includes("__other__") && (
               <Input

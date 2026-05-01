@@ -74,6 +74,19 @@ export const FIXED_QUESTIONS: Question[] = [
       },
     ],
   },
+  {
+    kind: "choice",
+    prompt: "How would you describe your proportions?",
+    options: [
+      "Long legs, shorter torso",
+      "Long torso, shorter legs",
+      "Pretty balanced overall",
+      "Broad shoulders, narrower hips",
+      "Narrower shoulders, wider hips",
+      "I honestly don't know",
+    ],
+    allowOther: false,
+  },
 ];
 
 export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
