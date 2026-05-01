@@ -533,6 +533,7 @@ function ItemDetail({
   onClose: () => void;
   onRetry: () => void;
 }) {
+  const [styleOpen, setStyleOpen] = useState(false);
   return (
     <div>
       <div className="relative">
@@ -591,7 +592,36 @@ function ItemDetail({
             ))}
           </div>
         )}
+
+        {item.status === "analysed" && (
+          <Button
+            onClick={() => setStyleOpen(true)}
+            className="mt-4 rounded-sm h-12 w-full"
+          >
+            Style this
+          </Button>
+        )}
       </div>
+
+      <Sheet open={styleOpen} onOpenChange={setStyleOpen}>
+        <SheetContent side="bottom" className="rounded-t-xl bg-background border-border p-8 max-h-[60vh]">
+          <SheetHeader className="text-left">
+            <SheetTitle className="font-serif text-2xl font-normal">
+              Outfit suggestions coming soon.
+            </SheetTitle>
+          </SheetHeader>
+          <p className="mt-4 text-muted-foreground">
+            We'll style this piece with the rest of your wardrobe in a moment.
+          </p>
+          <Button
+            onClick={() => setStyleOpen(false)}
+            variant="ghost"
+            className="mt-6 w-full"
+          >
+            Close
+          </Button>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
