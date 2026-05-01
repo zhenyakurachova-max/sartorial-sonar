@@ -80,6 +80,7 @@ export default function InterviewComplete() {
           style_archetypes: p.style_archetypes ?? [],
           avoid_list: p.avoid_list ?? [],
           body_notes: p.body_notes ?? null,
+          proportions: p.proportions ?? null,
           budget_ceiling: p.budget_ceiling ?? null,
           interview_complete: true,
         })
@@ -98,6 +99,7 @@ export default function InterviewComplete() {
         style_archetypes: p.style_archetypes ?? [],
         avoid_list: p.avoid_list ?? [],
         budget_ceiling: p.budget_ceiling ?? null,
+        proportions: p.proportions ?? null,
         interview_complete: true,
       });
       setPhase("ready");
@@ -129,6 +131,7 @@ export default function InterviewComplete() {
         style_archetypes: [],
         avoid_list: [],
         body_notes: null,
+        proportions: null,
         budget_ceiling: null,
         interview_complete: false,
       })
