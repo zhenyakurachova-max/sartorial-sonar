@@ -14,7 +14,7 @@ import {
   type Question,
 } from "@/lib/interview-questions";
 
-const TOTAL = 10;
+const TOTAL = 11;
 
 type StoredAnswer = { question_index: number; question: string; answer: string };
 
