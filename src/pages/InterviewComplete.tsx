@@ -12,6 +12,7 @@ type Profile = {
   style_archetypes: string[];
   avoid_list: string[];
   budget_ceiling: number | null;
+  proportions: string | null;
   interview_complete: boolean;
 };
 
@@ -31,7 +32,7 @@ export default function InterviewComplete() {
       // 1. Check if profile already complete.
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
-        .select("style_summary, colour_palette, style_archetypes, avoid_list, budget_ceiling, interview_complete")
+        .select("style_summary, colour_palette, style_archetypes, avoid_list, budget_ceiling, proportions, interview_complete")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled) return;
@@ -53,7 +54,7 @@ export default function InterviewComplete() {
       if (ansErr) console.error("[complete] answers fetch", ansErr);
 
       const history = (ans ?? []) as StoredAnswer[];
-      if (history.length < 10) {
+      if (history.length < 11) {
         setPhase("redirect");
         return;
       }
