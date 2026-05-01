@@ -50,6 +50,7 @@ export type Database = {
           created_at: string
           id: string
           interview_complete: boolean
+          proportions: string | null
           style_archetypes: string[]
           style_summary: string | null
           updated_at: string
@@ -62,6 +63,7 @@ export type Database = {
           created_at?: string
           id: string
           interview_complete?: boolean
+          proportions?: string | null
           style_archetypes?: string[]
           style_summary?: string | null
           updated_at?: string
@@ -74,6 +76,7 @@ export type Database = {
           created_at?: string
           id?: string
           interview_complete?: boolean
+          proportions?: string | null
           style_archetypes?: string[]
           style_summary?: string | null
           updated_at?: string
