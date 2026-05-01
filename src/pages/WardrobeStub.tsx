@@ -262,7 +262,7 @@ export default function WardrobeStub() {
   };
 
   const analysedCount = items.filter((i) => i.status === "analysed").length;
-  const showGapsBanner = analysedCount >= 3;
+  const showGapsBanner = analysedCount >= 5;
 
   const hasItems = items.length > 0;
 
