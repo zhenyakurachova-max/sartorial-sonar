@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-4-5";
 
 type Answer = { question_index: number; question: string; answer: string };
 
@@ -70,6 +70,10 @@ const TOOL = {
         type: "string",
         description: "1-2 sentences of fit and silhouette guidance, written as a stylist's read of your shape — not a recap of what you said. Second person. Empty string if truly unclear. No banned words.",
       },
+      proportions: {
+        type: "string",
+        description: "Verbatim her stated proportions answer (e.g. 'Long legs, shorter torso'). Empty string if she said she doesn't know.",
+      },
       budget_ceiling: {
         type: "integer",
         description: "Per-piece budget ceiling in EUR as a whole number. 0 if unclear.",
@@ -81,6 +85,7 @@ const TOOL = {
       "colour_palette",
       "avoid_list",
       "body_notes",
+      "proportions",
       "budget_ceiling",
     ],
     additionalProperties: false,
