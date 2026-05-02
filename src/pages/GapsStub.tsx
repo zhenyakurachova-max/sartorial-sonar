@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2, ShoppingBag } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandMark } from "@/components/BrandMark";
@@ -44,14 +44,8 @@ export default function GapsStub() {
     <main className="min-h-screen bg-background flex flex-col">
       <header className="px-6 pt-8 flex items-center justify-between">
         <BrandMark />
-        <Link
-          to="/app/wardrobe"
-          className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="h-3 w-3" /> Wardrobe
-        </Link>
       </header>
-      <section className="flex-1 px-6 pt-10 pb-16 max-w-2xl mx-auto w-full">
+      <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
         <h1 className="font-serif text-3xl">Your gaps</h1>
         <p className="mt-3 text-muted-foreground">
           The pieces missing from your wardrobe, in priority order.
@@ -84,6 +78,11 @@ export default function GapsStub() {
                   <PriorityPill priority={g.priority} />
                 </div>
                 <p className="mt-2 text-muted-foreground text-pretty">{g.description}</p>
+                <Button asChild className="mt-5 h-10 rounded-sm">
+                  <Link to="/app/recommendations" state={{ gap: g }}>
+                    <ShoppingBag className="mr-2 h-4 w-4" /> What should I buy?
+                  </Link>
+                </Button>
               </article>
             ))}
           </div>
