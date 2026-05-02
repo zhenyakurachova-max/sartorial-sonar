@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, X, Camera, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Plus, X, Camera, Image as ImageIcon, Loader2, LockKeyhole } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,11 @@ type Item = {
 };
 
 type AnalysisResult = {
+  id?: string;
+  image_path?: string;
+  category?: string;
+  status?: Status;
+  created_at?: string;
   item?: Item | null;
   verdict?: Verdict;
   reason?: string | null;
@@ -36,6 +41,7 @@ const CATEGORIES = ["Top", "Bottom", "Dress", "Outerwear", "Shoes", "Bag", "Acce
 type Category = (typeof CATEGORIES)[number];
 
 const ANALYSIS_TIMEOUT_MS = 30_000;
+const FREE_ANALYSED_LIMIT = 10;
 
 const isVerdict = (value: unknown): value is Verdict =>
   value === "keep" || value === "dump" || value === "gap";
@@ -46,13 +52,14 @@ const analysisTimeout = () =>
   });
 
 export default function WardrobeStub() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   const [addOpen, setAddOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +132,15 @@ export default function WardrobeStub() {
   };
 
   const runAnalysis = async (itemId: string) => {
+    const analysedBeforeThis = items.filter((i) => i.status === "analysed" && i.id !== itemId).length;
+    if (analysedBeforeThis >= FREE_ANALYSED_LIMIT) {
+      console.warn("[analyse-item] paywall gate reached", { itemId, analysedBeforeThis });
+      setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" as const } : it)));
+      setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" as const } : current));
+      setPaywallOpen(true);
+      return;
+    }
+
     console.log("[analyse-item] invoking for item:", itemId);
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
@@ -146,6 +162,7 @@ export default function WardrobeStub() {
         }),
       ]);
       console.log("[analyse-item] raw response:", response);
+      console.log("[analyse-item] response.error:", response?.error ?? null);
       data = (response?.data ?? null) as AnalysisResult | null;
       error = response?.error ?? null;
     } catch (e: any) {
@@ -154,6 +171,12 @@ export default function WardrobeStub() {
     }
 
     console.log("[analyse-item] parsed data:", data, "error:", error);
+
+    const applyAnalysedItem = (nextItem: Item) => {
+      console.log("[analyse-item] applying item to UI:", nextItem);
+      setItems((prev) => prev.map((it) => (it.id === itemId ? nextItem : it)));
+      setDetailItem((current) => (current?.id === itemId ? nextItem : current));
+    };
 
     let errMessage: string | null = null;
     if (error) {
@@ -173,9 +196,10 @@ export default function WardrobeStub() {
     } else if (data?.error) {
       errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
     } else if (data?.item && data.item.status === "analysed" && isVerdict(data.item.verdict)) {
-      console.log("[analyse-item] applying returned item:", data.item);
-      setItems((prev) => prev.map((it) => (it.id === itemId ? data.item! : it)));
-      setDetailItem((current) => (current?.id === itemId ? data.item! : current));
+      applyAnalysedItem(data.item);
+      return;
+    } else if (data?.id === itemId && data.status === "analysed" && isVerdict(data.verdict)) {
+      applyAnalysedItem(data as unknown as Item);
       return;
     } else if (!isVerdict(data?.verdict)) {
       // Fallback: re-fetch the item from DB in case the function wrote results but
@@ -187,9 +211,7 @@ export default function WardrobeStub() {
         .single();
       if (refreshed && refreshed.status === "analysed" && isVerdict(refreshed.verdict)) {
         console.log("[analyse-item] recovered from DB:", refreshed);
-        const fresh = refreshed as Item;
-        setItems((prev) => prev.map((it) => (it.id === itemId ? fresh : it)));
-        setDetailItem((current) => (current?.id === itemId ? fresh : current));
+        applyAnalysedItem(refreshed as Item);
         return;
       }
       errMessage = timedOut ? "Analysis timed out after 30 seconds." : "Analysis returned no verdict.";
@@ -213,19 +235,10 @@ export default function WardrobeStub() {
     const tags = data!.tags ?? [];
     const analysedItem: Item | null = data?.item && data.item.id === itemId ? data.item : null;
     console.log("[analyse-item] success — updating UI:", { itemId, verdict, analysedItem });
+    const fallbackItem = items.find((it) => it.id === itemId);
+    const nextItem = analysedItem ?? (fallbackItem ? { ...fallbackItem, status: "analysed" as const, verdict, reason, tags } : null);
 
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? analysedItem ?? { ...it, status: "analysed", verdict, reason, tags }
-          : it,
-      ),
-    );
-    setDetailItem((current) =>
-      current?.id === itemId
-        ? analysedItem ?? { ...current, status: "analysed", verdict, reason, tags }
-        : current,
-    );
+    if (nextItem) applyAnalysedItem(nextItem);
   };
 
   const onRetry = async (itemId: string) => {
@@ -277,26 +290,9 @@ export default function WardrobeStub() {
     <main className="min-h-screen bg-background flex flex-col">
       <header className="px-6 pt-8 flex items-center justify-between">
         <BrandMark />
-        <div className="flex items-center gap-4">
-          {hasItems && (
-            <button
-              onClick={() => setAddOpen(true)}
-              aria-label="Add item"
-              className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-sm"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          )}
-          <button
-            onClick={signOut}
-            className="text-xs uppercase tracking-wider text-muted-foreground"
-          >
-            Sign out
-          </button>
-        </div>
       </header>
 
-      <section className="flex-1 px-6 pt-10 pb-16 max-w-2xl mx-auto w-full">
+      <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
         <h1 className="font-serif text-3xl">Your wardrobe</h1>
 
         {loading ? (
@@ -341,6 +337,40 @@ export default function WardrobeStub() {
           </div>
         )}
       </section>
+
+      {hasItems && (
+        <button
+          onClick={() => setAddOpen(true)}
+          aria-label="Add item"
+          className="fixed bottom-20 right-5 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
+
+      {paywallOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 px-6">
+          <div className="w-full max-w-sm text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-primary">
+              <LockKeyhole className="h-5 w-5" />
+            </div>
+            <h2 className="mt-6 font-serif text-3xl leading-tight text-balance">You've audited 10 pieces.</h2>
+            <p className="mt-4 text-muted-foreground text-pretty">
+              Unlock your full wardrobe audit for a one-time payment of €29.
+            </p>
+            <Button className="mt-8 h-12 w-full rounded-sm" onClick={() => setPaywallOpen(false)}>
+              Unlock for €29
+            </Button>
+            <button
+              type="button"
+              onClick={() => setPaywallOpen(false)}
+              className="mt-4 text-sm text-muted-foreground underline underline-offset-4"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hidden file inputs */}
       <input
@@ -499,7 +529,7 @@ function ItemTile({
             e.stopPropagation();
             onRetry();
           }}
-          className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
+        className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-verdict-gap text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
         >
           Retry
         </button>
@@ -512,10 +542,10 @@ function VerdictPill({ verdict, large = false }: { verdict: Verdict; large?: boo
   const label = verdict === "keep" ? "Keep" : verdict === "dump" ? "Dump" : "Gap";
   const styles =
     verdict === "keep"
-      ? "bg-[hsl(var(--verdict-keep))] text-primary-foreground"
+      ? "bg-verdict-keep text-primary-foreground"
       : verdict === "dump"
-        ? "bg-[hsl(var(--verdict-dump))] text-primary-foreground"
-        : "bg-[hsl(var(--verdict-gap))] text-foreground";
+        ? "bg-verdict-dump text-primary-foreground"
+        : "bg-verdict-gap text-foreground";
   return (
     <span
       className={cn(
@@ -574,7 +604,7 @@ function ItemDetail({
           {item.status === "failed" && (
             <button
               onClick={onRetry}
-              className="px-3 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-xs uppercase tracking-wider font-medium"
+              className="px-3 py-1 rounded-full bg-verdict-gap text-foreground text-xs uppercase tracking-wider font-medium"
             >
               Retry
             </button>
