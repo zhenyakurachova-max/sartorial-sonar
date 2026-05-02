@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, X, Camera, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Plus, X, Camera, Image as ImageIcon, Loader2, LockKeyhole } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,7 @@ const analysisTimeout = () =>
   });
 
 export default function WardrobeStub() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -290,26 +290,9 @@ export default function WardrobeStub() {
     <main className="min-h-screen bg-background flex flex-col">
       <header className="px-6 pt-8 flex items-center justify-between">
         <BrandMark />
-        <div className="flex items-center gap-4">
-          {hasItems && (
-            <button
-              onClick={() => setAddOpen(true)}
-              aria-label="Add item"
-              className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-sm"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          )}
-          <button
-            onClick={signOut}
-            className="text-xs uppercase tracking-wider text-muted-foreground"
-          >
-            Sign out
-          </button>
-        </div>
       </header>
 
-      <section className="flex-1 px-6 pt-10 pb-16 max-w-2xl mx-auto w-full">
+      <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
         <h1 className="font-serif text-3xl">Your wardrobe</h1>
 
         {loading ? (
@@ -354,6 +337,40 @@ export default function WardrobeStub() {
           </div>
         )}
       </section>
+
+      {hasItems && (
+        <button
+          onClick={() => setAddOpen(true)}
+          aria-label="Add item"
+          className="fixed bottom-20 right-5 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
+
+      {paywallOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 px-6">
+          <div className="w-full max-w-sm text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-primary">
+              <LockKeyhole className="h-5 w-5" />
+            </div>
+            <h2 className="mt-6 font-serif text-3xl leading-tight text-balance">You've audited 10 pieces.</h2>
+            <p className="mt-4 text-muted-foreground text-pretty">
+              Unlock your full wardrobe audit for a one-time payment of €29.
+            </p>
+            <Button className="mt-8 h-12 w-full rounded-sm" onClick={() => setPaywallOpen(false)}>
+              Unlock for €29
+            </Button>
+            <button
+              type="button"
+              onClick={() => setPaywallOpen(false)}
+              className="mt-4 text-sm text-muted-foreground underline underline-offset-4"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hidden file inputs */}
       <input
