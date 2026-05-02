@@ -529,7 +529,7 @@ function ItemTile({
             e.stopPropagation();
             onRetry();
           }}
-          className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
+        className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-verdict-gap text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
         >
           Retry
         </button>
@@ -604,7 +604,7 @@ function ItemDetail({
           {item.status === "failed" && (
             <button
               onClick={onRetry}
-              className="px-3 py-1 rounded-full bg-[hsl(var(--verdict-gap))] text-foreground text-xs uppercase tracking-wider font-medium"
+              className="px-3 py-1 rounded-full bg-verdict-gap text-foreground text-xs uppercase tracking-wider font-medium"
             >
               Retry
             </button>
