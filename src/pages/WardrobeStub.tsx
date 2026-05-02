@@ -135,8 +135,8 @@ export default function WardrobeStub() {
     const analysedBeforeThis = items.filter((i) => i.status === "analysed" && i.id !== itemId).length;
     if (analysedBeforeThis >= FREE_ANALYSED_LIMIT) {
       console.warn("[analyse-item] paywall gate reached", { itemId, analysedBeforeThis });
-      setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)));
-      setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" } : current));
+      setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" as const } : it)));
+      setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" as const } : current));
       setPaywallOpen(true);
       return;
     }
@@ -199,7 +199,7 @@ export default function WardrobeStub() {
       applyAnalysedItem(data.item);
       return;
     } else if (data?.id === itemId && data.status === "analysed" && isVerdict(data.verdict)) {
-      applyAnalysedItem(data as Item);
+      applyAnalysedItem(data as unknown as Item);
       return;
     } else if (!isVerdict(data?.verdict)) {
       // Fallback: re-fetch the item from DB in case the function wrote results but
