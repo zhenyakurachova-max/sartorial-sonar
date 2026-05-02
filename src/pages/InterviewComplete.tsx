@@ -148,7 +148,7 @@ export default function InterviewComplete() {
         <BrandMark />
       </header>
 
-      <section className="flex-1 px-6 pt-16 pb-12 max-w-md mx-auto w-full">
+      <section className="flex-1 px-6 pt-16 pb-24 max-w-md mx-auto w-full">
         {phase === "loading" || phase === "building" ? (
           <>
             <h1 className="font-serif text-3xl text-balance">Building your style profile…</h1>
