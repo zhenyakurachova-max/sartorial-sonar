@@ -167,6 +167,12 @@ export default function WardrobeStub() {
 
     console.log("[analyse-item] parsed data:", data, "error:", error);
 
+    const applyAnalysedItem = (nextItem: Item) => {
+      console.log("[analyse-item] applying item to UI:", nextItem);
+      setItems((prev) => prev.map((it) => (it.id === itemId ? nextItem : it)));
+      setDetailItem((current) => (current?.id === itemId ? nextItem : current));
+    };
+
     let errMessage: string | null = null;
     if (error) {
       try {
@@ -185,9 +191,10 @@ export default function WardrobeStub() {
     } else if (data?.error) {
       errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
     } else if (data?.item && data.item.status === "analysed" && isVerdict(data.item.verdict)) {
-      console.log("[analyse-item] applying returned item:", data.item);
-      setItems((prev) => prev.map((it) => (it.id === itemId ? data.item! : it)));
-      setDetailItem((current) => (current?.id === itemId ? data.item! : current));
+      applyAnalysedItem(data.item);
+      return;
+    } else if (data?.id === itemId && data.status === "analysed" && isVerdict(data.verdict)) {
+      applyAnalysedItem(data as Item);
       return;
     } else if (!isVerdict(data?.verdict)) {
       // Fallback: re-fetch the item from DB in case the function wrote results but
@@ -199,9 +206,7 @@ export default function WardrobeStub() {
         .single();
       if (refreshed && refreshed.status === "analysed" && isVerdict(refreshed.verdict)) {
         console.log("[analyse-item] recovered from DB:", refreshed);
-        const fresh = refreshed as Item;
-        setItems((prev) => prev.map((it) => (it.id === itemId ? fresh : it)));
-        setDetailItem((current) => (current?.id === itemId ? fresh : current));
+        applyAnalysedItem(refreshed as Item);
         return;
       }
       errMessage = timedOut ? "Analysis timed out after 30 seconds." : "Analysis returned no verdict.";
@@ -225,19 +230,10 @@ export default function WardrobeStub() {
     const tags = data!.tags ?? [];
     const analysedItem: Item | null = data?.item && data.item.id === itemId ? data.item : null;
     console.log("[analyse-item] success — updating UI:", { itemId, verdict, analysedItem });
+    const fallbackItem = items.find((it) => it.id === itemId);
+    const nextItem = analysedItem ?? (fallbackItem ? { ...fallbackItem, status: "analysed" as const, verdict, reason, tags } : null);
 
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? analysedItem ?? { ...it, status: "analysed", verdict, reason, tags }
-          : it,
-      ),
-    );
-    setDetailItem((current) =>
-      current?.id === itemId
-        ? analysedItem ?? { ...current, status: "analysed", verdict, reason, tags }
-        : current,
-    );
+    if (nextItem) applyAnalysedItem(nextItem);
   };
 
   const onRetry = async (itemId: string) => {
