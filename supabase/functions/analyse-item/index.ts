@@ -78,9 +78,25 @@ verdict must be exactly one of: keep, dump, gap
     const result = JSON.parse(cleaned);
     console.log("Result:", result);
 
-    await supabase.from("wardrobe_items").update({ verdict: result.verdict, reason: result.reason, tags: result.tags, status: "analysed" }).eq("id", item_id);
+    const verdict = String(result.verdict ?? "").toLowerCase();
+    if (!["keep", "dump", "gap"].includes(verdict)) {
+      return new Response(JSON.stringify({ error: "Invalid verdict returned: " + JSON.stringify(result) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
-    return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { data: updatedItem, error: updateError } = await supabase
+      .from("wardrobe_items")
+      .update({ verdict, reason: result.reason ?? null, tags: Array.isArray(result.tags) ? result.tags : [], status: "analysed" })
+      .eq("id", item_id)
+      .eq("user_id", user.id)
+      .select("id, image_path, category, status, verdict, reason, tags, created_at")
+      .single();
+    if (updateError || !updatedItem) {
+      console.error("Update error:", updateError);
+      return new Response(JSON.stringify({ error: "Could not save analysis: " + (updateError?.message ?? "No updated item returned") }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    console.log("Updated wardrobe item:", updatedItem.id, updatedItem.status, updatedItem.verdict);
+    return new Response(JSON.stringify({ ...updatedItem, verdict: updatedItem.verdict, reason: updatedItem.reason, tags: updatedItem.tags ?? [], item: updatedItem }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e) {
     console.error("Function error:", String(e));
