@@ -25,6 +25,7 @@ type Item = {
 };
 
 type AnalysisResult = {
+  item?: Item | null;
   verdict?: Verdict;
   reason?: string | null;
   tags?: string[] | null;
@@ -171,6 +172,11 @@ export default function WardrobeStub() {
       }
     } else if (data?.error) {
       errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+    } else if (data?.item && data.item.status === "analysed" && isVerdict(data.item.verdict)) {
+      console.log("[analyse-item] applying returned item:", data.item);
+      setItems((prev) => prev.map((it) => (it.id === itemId ? data.item! : it)));
+      setDetailItem((current) => (current?.id === itemId ? data.item! : current));
+      return;
     } else if (!isVerdict(data?.verdict)) {
       // Fallback: re-fetch the item from DB in case the function wrote results but
       // the response payload shape was unexpected.
@@ -205,18 +211,19 @@ export default function WardrobeStub() {
     const verdict = data!.verdict!;
     const reason = data!.reason ?? null;
     const tags = data!.tags ?? [];
-    console.log("[analyse-item] success — updating UI:", { itemId, verdict });
+    const analysedItem: Item | null = data?.item && data.item.id === itemId ? data.item : null;
+    console.log("[analyse-item] success — updating UI:", { itemId, verdict, analysedItem });
 
     setItems((prev) =>
       prev.map((it) =>
         it.id === itemId
-          ? { ...it, status: "analysed", verdict, reason, tags }
+          ? analysedItem ?? { ...it, status: "analysed", verdict, reason, tags }
           : it,
       ),
     );
     setDetailItem((current) =>
       current?.id === itemId
-        ? { ...current, status: "analysed", verdict, reason, tags }
+        ? analysedItem ?? { ...current, status: "analysed", verdict, reason, tags }
         : current,
     );
   };
