@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Loader2, Search } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { Loader2, Search } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -47,11 +47,8 @@ export default function RecommendationsStub() {
 
   return (
     <main className="min-h-screen bg-background pb-24">
-      <header className="px-6 pt-8 flex items-center justify-between">
+      <header className="px-6 pt-8">
         <BrandMark />
-        <Link to="/app/gaps" className="inline-flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground">
-          <ArrowLeft className="h-3 w-3" /> Gaps
-        </Link>
       </header>
       <section className="mx-auto w-full max-w-2xl px-6 pt-10">
         <h1 className="font-serif text-3xl">What should I buy?</h1>
