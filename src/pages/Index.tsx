@@ -12,7 +12,7 @@ const Index = () => {
         <BrandMark />
       </header>
 
-      <section className="flex-1 px-6 pt-16 pb-12 max-w-md mx-auto w-full">
+      <section className="px-6 pt-16 pb-12 max-w-md mx-auto w-full">
         <h1 className="font-serif text-4xl leading-tight text-balance">
           An honest look at what's in your wardrobe.
         </h1>
@@ -32,6 +32,21 @@ const Index = () => {
               Free to start. No card needed.
             </p>
           )}
+        </div>
+      </section>
+      <section className="border-t border-border px-6 py-12">
+        <div className="mx-auto grid w-full max-w-3xl gap-6 md:grid-cols-3">
+          {[
+            ["1", "Tell us your style", "a 10-minute interview that actually listens."],
+            ["2", "Photograph your wardrobe", "every piece gets an honest verdict."],
+            ["3", "Shop with intention", "specific pieces, named designers, no guessing."],
+          ].map(([num, title, body]) => (
+            <article key={num} className="border-l border-primary pl-4">
+              <p className="text-xs uppercase tracking-wider text-primary">{num}</p>
+              <h2 className="mt-3 font-serif text-2xl leading-tight">{title}</h2>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{body}</p>
+            </article>
+          ))}
         </div>
       </section>
     </main>
