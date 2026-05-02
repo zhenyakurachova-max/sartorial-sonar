@@ -186,7 +186,7 @@ export default function Interview() {
         <Progress value={progress} className="mt-4 h-1 bg-muted [&>div]:bg-primary" />
       </header>
 
-      <section className="flex-1 px-6 pt-12 pb-10 max-w-md mx-auto w-full">
+      <section className="flex-1 px-6 pt-12 pb-24 max-w-md mx-auto w-full">
         {hydrating && currentIndex === 0 && answers.length === 0 ? (
           <p className="text-muted-foreground mb-6">{copy.interview.intro}</p>
         ) : null}
