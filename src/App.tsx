@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -17,7 +18,7 @@ import RecommendationsStub from "./pages/RecommendationsStub.tsx";
 import ProfileStub from "./pages/ProfileStub.tsx";
 
 const queryClient = new QueryClient();
-const Authed = ({ children }: { children: React.ReactNode }) => (
+const Authed = ({ children }: { children: ReactNode }) => (
   <RequireAuth>
     {children}
     <BottomNav />
