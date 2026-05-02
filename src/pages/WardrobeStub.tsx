@@ -25,6 +25,11 @@ type Item = {
 };
 
 type AnalysisResult = {
+  id?: string;
+  image_path?: string;
+  category?: string;
+  status?: Status;
+  created_at?: string;
   item?: Item | null;
   verdict?: Verdict;
   reason?: string | null;
