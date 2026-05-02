@@ -542,10 +542,10 @@ function VerdictPill({ verdict, large = false }: { verdict: Verdict; large?: boo
   const label = verdict === "keep" ? "Keep" : verdict === "dump" ? "Dump" : "Gap";
   const styles =
     verdict === "keep"
-      ? "bg-[hsl(var(--verdict-keep))] text-primary-foreground"
+      ? "bg-verdict-keep text-primary-foreground"
       : verdict === "dump"
-        ? "bg-[hsl(var(--verdict-dump))] text-primary-foreground"
-        : "bg-[hsl(var(--verdict-gap))] text-foreground";
+        ? "bg-verdict-dump text-primary-foreground"
+        : "bg-verdict-gap text-foreground";
   return (
     <span
       className={cn(
