@@ -36,6 +36,7 @@ const CATEGORIES = ["Top", "Bottom", "Dress", "Outerwear", "Shoes", "Bag", "Acce
 type Category = (typeof CATEGORIES)[number];
 
 const ANALYSIS_TIMEOUT_MS = 30_000;
+const FREE_ANALYSED_LIMIT = 10;
 
 const isVerdict = (value: unknown): value is Verdict =>
   value === "keep" || value === "dump" || value === "gap";
@@ -53,6 +54,7 @@ export default function WardrobeStub() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +127,15 @@ export default function WardrobeStub() {
   };
 
   const runAnalysis = async (itemId: string) => {
+    const analysedBeforeThis = items.filter((i) => i.status === "analysed" && i.id !== itemId).length;
+    if (analysedBeforeThis >= FREE_ANALYSED_LIMIT) {
+      console.warn("[analyse-item] paywall gate reached", { itemId, analysedBeforeThis });
+      setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)));
+      setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" } : current));
+      setPaywallOpen(true);
+      return;
+    }
+
     console.log("[analyse-item] invoking for item:", itemId);
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
@@ -146,6 +157,7 @@ export default function WardrobeStub() {
         }),
       ]);
       console.log("[analyse-item] raw response:", response);
+      console.log("[analyse-item] response.error:", response?.error ?? null);
       data = (response?.data ?? null) as AnalysisResult | null;
       error = response?.error ?? null;
     } catch (e: any) {
