@@ -28,7 +28,13 @@ export default function RecommendationsStub() {
     let cancelled = false;
     setPhase("loading");
     setErr(null);
-    supabase.functions.invoke("wardrobe-recommendations", { body: { gap } }).then(({ data, error }) => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      return supabase.functions.invoke("wardrobe-recommendations", {
+        body: { gap },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+      });
+    })().then(({ data, error }) => {
       if (cancelled) return;
       if (error || data?.error) {
         const msg = data?.error ?? error?.message ?? "Couldn't build recommendations.";
@@ -51,7 +57,7 @@ export default function RecommendationsStub() {
         <BrandMark />
       </header>
       <section className="mx-auto w-full max-w-2xl px-6 pt-10">
-        <h1 className="font-serif text-3xl">What should I buy?</h1>
+        <h1 className="font-serif text-3xl">What to buy next.</h1>
         {gapText && <p className="mt-3 text-muted-foreground text-pretty">{gapText}</p>}
 
         {phase === "idle" && (

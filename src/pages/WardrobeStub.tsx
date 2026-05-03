@@ -152,9 +152,11 @@ export default function WardrobeStub() {
     let timedOut = false;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response: any = await Promise.race([
         supabase.functions.invoke("analyse-item", {
           body: { item_id: itemId },
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
         }),
         analysisTimeout().catch((e) => {
           timedOut = true;
@@ -293,7 +295,7 @@ export default function WardrobeStub() {
       </header>
 
       <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
-        <h1 className="font-serif text-3xl">Your wardrobe</h1>
+        <h1 className="font-serif text-3xl">Your wardrobe.</h1>
 
         {loading ? (
           <div className="mt-16 flex justify-center">
@@ -312,7 +314,7 @@ export default function WardrobeStub() {
             </Button>
           </div>
         ) : (
-          <div className="mt-8 grid grid-cols-2 gap-3">
+          <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 gap-3">
             {items.map((it) => (
               <ItemTile
                 key={it.id}
@@ -342,6 +344,7 @@ export default function WardrobeStub() {
         <button
           onClick={() => setAddOpen(true)}
           aria-label="Add item"
+          title="Add item"
           className="fixed bottom-20 right-5 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg"
         >
           <Plus className="h-6 w-6" />

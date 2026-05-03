@@ -42,8 +42,8 @@ export default function ProfileStub() {
             <p className="font-serif text-xl leading-snug text-pretty">{profile.style_summary}</p>
           )}
           <Row label="Archetypes" value={profile?.style_archetypes?.join(" · ") || "—"} />
-          <Row label="Palette" value={profile?.colour_palette?.join(" · ") || "—"} />
           <Row label="Proportions" value={profile?.proportions || "—"} />
+          <Row label="Palette" value={profile?.colour_palette?.join(" · ") || "—"} />
           <Row label="Budget ceiling" value={profile?.budget_ceiling ? `€${profile.budget_ceiling}` : "—"} />
           <Row label="Avoid" value={profile?.avoid_list?.join(" · ") || "—"} />
         </div>
