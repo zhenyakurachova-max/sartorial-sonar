@@ -23,7 +23,11 @@ export default function GapsStub() {
     if (!user) return;
     setPhase("loading");
     setErr(null);
-    const { data, error } = await supabase.functions.invoke("wardrobe-gaps", { body: {} });
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("wardrobe-gaps", {
+      body: {},
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+    });
     if (error || data?.error) {
       const msg = data?.error ?? error?.message ?? "Couldn't build your gap list.";
       console.error("[gaps]", msg);
@@ -48,7 +52,7 @@ export default function GapsStub() {
       <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
         <h1 className="font-serif text-3xl">Your gaps</h1>
         <p className="mt-3 text-muted-foreground">
-          The pieces missing from your wardrobe, in priority order.
+          Here's what your wardrobe is missing.
         </p>
 
         {phase === "loading" && (
@@ -80,7 +84,7 @@ export default function GapsStub() {
                 <p className="mt-2 text-muted-foreground text-pretty">{g.description}</p>
                 <Button asChild className="mt-5 h-10 rounded-sm">
                   <Link to="/app/recommendations" state={{ gap: g }}>
-                    <ShoppingBag className="mr-2 h-4 w-4" /> What should I buy?
+                    <ShoppingBag className="mr-2 h-4 w-4" /> What to buy next.
                   </Link>
                 </Button>
               </article>
