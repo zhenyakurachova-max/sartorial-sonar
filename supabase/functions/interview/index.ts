@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-5";
+const MODEL = "claude-sonnet-4-5-20251001";
 
 type Answer = { question_index: number; question: string; answer: string };
 
