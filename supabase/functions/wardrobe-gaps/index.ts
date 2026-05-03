@@ -3,7 +3,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const TOOL = {
@@ -14,8 +14,7 @@ const TOOL = {
     properties: {
       gaps: {
         type: "array",
-        minItems: 3,
-        maxItems: 5,
+        description: "Between 3 and 5 gaps.",
         items: {
           type: "object",
           properties: {
@@ -51,8 +50,8 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", user.id)
       .eq("status", "analysed");
 
-    if (!items || items.length < 5) {
-      return new Response(JSON.stringify({ error: "Need at least 5 analysed items." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!items || items.length < 3) {
+      return new Response(JSON.stringify({ error: "Need at least 3 analysed items." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -83,7 +82,7 @@ Banned words: effortless, chic, elevate, elevated, timeless, versatile, seamless
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20251001",
+        model: "claude-sonnet-4-6",
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: "user", content: userMsg }],
@@ -103,7 +102,14 @@ Banned words: effortless, chic, elevate, elevated, timeless, versatile, seamless
       return new Response(JSON.stringify({ error: "No gaps returned" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ gaps: toolUse.input.gaps }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const gaps = toolUse.input.gaps;
+
+    const { error: upsertErr } = await supabase
+      .from("gap_summaries")
+      .upsert({ user_id: user.id, gaps, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (upsertErr) console.error("gap_summaries upsert error", upsertErr.message);
+
+    return new Response(JSON.stringify({ gaps }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("wardrobe-gaps error", String(e));
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

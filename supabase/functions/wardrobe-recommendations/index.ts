@@ -72,7 +72,7 @@ Use real designers or brands, concrete piece names, approximate EUR pricing, and
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20251001",
+        model: "claude-sonnet-4-6",
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: "user", content: `Gap title: ${gap.title || "Wardrobe gap"}\nGap description: ${gap.description || gap.title}` }],

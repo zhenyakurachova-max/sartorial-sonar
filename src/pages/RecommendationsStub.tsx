@@ -70,20 +70,30 @@ export default function RecommendationsStub() {
           <div className="mt-12"><p className="text-sm text-destructive">{err}</p></div>
         )}
         {phase === "ready" && (
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {recommendations.map((rec, i) => (
-              <article key={`${rec.designer}-${i}`} className="border border-border bg-muted/30 p-5 rounded-sm">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">{rec.designer}</p>
-                <h2 className="mt-2 font-serif text-xl leading-snug">{rec.piece_name}</h2>
-                <p className="mt-3 text-sm text-muted-foreground text-pretty">{rec.reason}</p>
-                <p className="mt-4 text-sm font-medium">{rec.price_eur}</p>
-                <Button asChild className="mt-5 h-10 w-full rounded-sm">
-                  <a href={`https://www.google.com/search?q=${encodeURIComponent(rec.search_query)}`} target="_blank" rel="noreferrer">
-                    <Search className="mr-2 h-4 w-4" /> Find this piece
-                  </a>
-                </Button>
-              </article>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: "40px" }}>
+            {/* Cards row */}
+            <div style={{ display: "flex", gap: "16px" }}>
+              {recommendations.map((rec, i) => (
+                <article key={`${rec.designer}-${i}`} style={{ flex: 1, border: "1px solid #e5e7eb", backgroundColor: "rgba(249,250,251,0.3)", padding: "20px", borderRadius: "4px" }}>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{rec.designer}</p>
+                  <h2 className="mt-2 font-serif text-xl leading-snug">{rec.piece_name}</h2>
+                  <p className="mt-3 text-sm text-muted-foreground text-pretty">{rec.reason}</p>
+                  <p className="mt-4 text-sm font-medium">{rec.price_eur}</p>
+                </article>
+              ))}
+            </div>
+            {/* Buttons row */}
+            <div style={{ display: "flex", gap: "16px", marginTop: "12px" }}>
+              {recommendations.map((rec, i) => (
+                <div key={`btn-${rec.designer}-${i}`} style={{ flex: 1 }}>
+                  <Button asChild className="h-10 w-full rounded-sm">
+                    <a href={`https://www.google.com/search?q=${encodeURIComponent(rec.search_query)}`} target="_blank" rel="noreferrer">
+                      <Search className="mr-2 h-4 w-4" /> Find this piece
+                    </a>
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>

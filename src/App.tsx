@@ -16,6 +16,7 @@ import WardrobeStub from "./pages/WardrobeStub.tsx";
 import GapsStub from "./pages/GapsStub.tsx";
 import RecommendationsStub from "./pages/RecommendationsStub.tsx";
 import ProfileStub from "./pages/ProfileStub.tsx";
+import AuthCallback from "./pages/AuthCallback.tsx";
 
 const queryClient = new QueryClient();
 const Authed = ({ children }: { children: ReactNode }) => (
@@ -34,6 +35,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/signup" element={<Signup />} />
             <Route
               path="/app/interview"

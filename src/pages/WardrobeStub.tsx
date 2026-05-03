@@ -69,6 +69,9 @@ export default function WardrobeStub() {
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [pendingCategory, setPendingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [fileTooLarge, setFileTooLarge] = useState(false);
+  const [staleIds, setStaleIds] = useState<Set<string>>(new Set());
+  const pendingSince = useRef<Record<string, number>>({});
 
   // Load items
   useEffect(() => {
@@ -111,12 +114,45 @@ export default function WardrobeStub() {
     };
   }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track when items enter "pending" and expose staleIds after 30 s
+  useEffect(() => {
+    const itemIds = new Set(items.map((i) => i.id));
+    // Remove entries for items that no longer exist
+    Object.keys(pendingSince.current).forEach((id) => {
+      if (!itemIds.has(id)) delete pendingSince.current[id];
+    });
+    items.forEach((item) => {
+      if (item.status === "pending" && !pendingSince.current[item.id]) {
+        // Use created_at so DB-loaded stuck items are immediately stale
+        pendingSince.current[item.id] = new Date(item.created_at).getTime();
+      } else if (item.status !== "pending") {
+        delete pendingSince.current[item.id];
+      }
+    });
+    const check = () => {
+      const now = Date.now();
+      setStaleIds(new Set(
+        Object.entries(pendingSince.current)
+          .filter(([, since]) => now - since > 30_000)
+          .map(([id]) => id),
+      ));
+    };
+    check();
+    const timer = setInterval(check, 5_000);
+    return () => clearInterval(timer);
+  }, [items]);
+
   const onPick = (mode: "camera" | "gallery") => {
     (mode === "camera" ? cameraInputRef : galleryInputRef).current?.click();
   };
 
   const onFileChosen = (file: File | null) => {
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setFileTooLarge(true);
+      return;
+    }
+    setFileTooLarge(false);
     setPendingFile(file);
     setPendingPreview(URL.createObjectURL(file));
     setPendingCategory(null);
@@ -129,6 +165,7 @@ export default function WardrobeStub() {
     setPendingPreview(null);
     setPendingCategory(null);
     setSubmitting(false);
+    setFileTooLarge(false);
   };
 
   const runAnalysis = async (itemId: string) => {
@@ -248,6 +285,13 @@ export default function WardrobeStub() {
     runAnalysis(itemId);
   };
 
+  const onDelete = async (itemId: string) => {
+    if (!confirm("Remove this item from your wardrobe?")) return;
+    await supabase.from("wardrobe_items").delete().eq("id", itemId);
+    setItems((prev) => prev.filter((it) => it.id !== itemId));
+    setDetailItem(null);
+  };
+
   const onAnalyse = async () => {
     if (!user || !pendingFile || !pendingCategory) return;
     setSubmitting(true);
@@ -284,7 +328,7 @@ export default function WardrobeStub() {
   };
 
   const analysedCount = items.filter((i) => i.status === "analysed").length;
-  const showGapsBanner = analysedCount >= 5;
+  const showGapsBanner = analysedCount >= 3;
 
   const hasItems = items.length > 0;
 
@@ -322,6 +366,8 @@ export default function WardrobeStub() {
                 src={urls[it.image_path]}
                 onClick={() => setDetailItem(it)}
                 onRetry={() => onRetry(it.id)}
+                onRemove={() => onDelete(it.id)}
+                isStale={staleIds.has(it.id)}
               />
             ))}
           </div>
@@ -401,7 +447,16 @@ export default function WardrobeStub() {
             </SheetTitle>
           </SheetHeader>
 
-          {!pendingPreview ? (
+          {fileTooLarge ? (
+            <div className="mt-6 space-y-4">
+              <p className="text-sm text-destructive">
+                This photo is too large. Please use a smaller image.
+              </p>
+              <Button variant="outline" onClick={resetAddSheet} className="rounded-sm h-12 w-full">
+                Remove
+              </Button>
+            </div>
+          ) : !pendingPreview ? (
             <div className="mt-6 space-y-3">
               <button
                 onClick={() => onPick("camera")}
@@ -480,6 +535,7 @@ export default function WardrobeStub() {
                 onRetry(detailItem.id);
                 setDetailItem(null);
               }}
+              onDelete={() => onDelete(detailItem.id)}
             />
           )}
         </SheetContent>
@@ -493,12 +549,17 @@ function ItemTile({
   src,
   onClick,
   onRetry,
+  onRemove,
+  isStale,
 }: {
   item: Item;
   src?: string;
   onClick: () => void;
   onRetry: () => void;
+  onRemove: () => void;
+  isStale: boolean;
 }) {
+  const showRemove = item.status === "failed" || (item.status === "pending" && isStale);
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-muted group">
       <button
@@ -528,13 +589,19 @@ function ItemTile({
       )}
       {item.status === "failed" && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRetry();
-          }}
-        className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-verdict-gap text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
+          onClick={(e) => { e.stopPropagation(); onRetry(); }}
+          className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-verdict-gap text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
         >
           Retry
+        </button>
+      )}
+      {showRemove && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          aria-label="Remove item"
+          className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/90 flex items-center justify-center shadow-sm"
+        >
+          <X className="h-3 w-3" />
         </button>
       )}
     </div>
@@ -567,11 +634,13 @@ function ItemDetail({
   src,
   onClose,
   onRetry,
+  onDelete,
 }: {
   item: Item;
   src?: string;
   onClose: () => void;
   onRetry: () => void;
+  onDelete: () => void;
 }) {
   const [styleOpen, setStyleOpen] = useState(false);
   return (
@@ -641,6 +710,14 @@ function ItemDetail({
             Style this
           </Button>
         )}
+
+        <Button
+          variant="ghost"
+          onClick={onDelete}
+          className="w-full rounded-sm text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          Remove item
+        </Button>
       </div>
 
       <Sheet open={styleOpen} onOpenChange={setStyleOpen}>

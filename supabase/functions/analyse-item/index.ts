@@ -63,7 +63,7 @@ verdict must be exactly one of: keep, dump, gap
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20251001",
+        model: "claude-sonnet-4-6",
         max_tokens: 256,
         system: systemPrompt,
         messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: `Category: ${item.category}. Give verdict.` }] }]
