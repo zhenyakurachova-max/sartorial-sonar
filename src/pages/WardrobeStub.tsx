@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { Plus, X, Camera, Image as ImageIcon, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -71,7 +70,8 @@ export default function WardrobeStub() {
 
   // Batch upload state
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
-  const [batchCategory, setBatchCategory] = useState<Category | null>(null);
+  const [batchPreviews, setBatchPreviews] = useState<string[]>([]);
+  const [batchCategories, setBatchCategories] = useState<(Category | null)[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Stale pending items
@@ -166,7 +166,9 @@ export default function WardrobeStub() {
     setSubmitting(false);
     setFileTooLarge(false);
     setBatchFiles([]);
-    setBatchCategory(null);
+    batchPreviews.forEach((p) => URL.revokeObjectURL(p));
+    setBatchPreviews([]);
+    setBatchCategories([]);
     setBatchProgress(null);
   };
 
@@ -304,7 +306,7 @@ export default function WardrobeStub() {
   };
 
   const onBatchUpload = async () => {
-    if (!user || !batchCategory || batchFiles.length === 0) return;
+    if (!user || batchFiles.length === 0 || batchCategories.some((c) => !c)) return;
     setSubmitting(true);
     setBatchProgress({ done: 0, total: batchFiles.length });
 
@@ -313,7 +315,7 @@ export default function WardrobeStub() {
 
     for (let i = 0; i < batchFiles.length; i++) {
       try {
-        const newItem = await uploadFile(batchFiles[i], batchCategory);
+        const newItem = await uploadFile(batchFiles[i], batchCategories[i]!);
         newItems.push(newItem);
         setItems((prev) => [newItem, ...prev]);
       } catch (e: any) {
@@ -337,8 +339,6 @@ export default function WardrobeStub() {
     }
   };
 
-  const analysedCount = items.filter((i) => i.status === "analysed").length;
-  const showGapsBanner = analysedCount >= 3;
   const hasItems = items.length > 0;
 
   return (
@@ -379,16 +379,10 @@ export default function WardrobeStub() {
           </div>
         )}
 
-        {showGapsBanner && (
-          <div className="mt-12 rounded-sm border border-border bg-muted/40 px-5 py-5 flex items-center justify-between gap-4">
-            <p className="font-serif text-lg leading-snug">Ready to see your gaps?</p>
-            <Link
-              to="/app/wardrobe"
-              className="shrink-0 inline-flex items-center justify-center rounded-sm bg-primary text-primary-foreground h-10 px-4 text-sm"
-            >
-              See my results
-            </Link>
-          </div>
+        {hasItems && (
+          <p className="mt-10 text-sm text-muted-foreground">
+            Kept pieces and gap suggestions are in your Wardrobe tab.
+          </p>
         )}
       </section>
 
@@ -430,6 +424,8 @@ export default function WardrobeStub() {
           } else {
             setFileTooLarge(false);
             setBatchFiles(files);
+            setBatchPreviews(files.map((f) => URL.createObjectURL(f)));
+            setBatchCategories(new Array(files.length).fill(null));
             setAddOpen(true);
           }
         }}
@@ -441,7 +437,7 @@ export default function WardrobeStub() {
           <SheetHeader className="text-left">
             <SheetTitle className="font-serif text-2xl font-normal">
               {batchFiles.length > 0
-                ? `Upload ${batchFiles.length} items`
+                ? `Categorise ${batchFiles.length} items`
                 : pendingPreview
                   ? "Categorise this piece"
                   : "Add an item"}
@@ -458,7 +454,7 @@ export default function WardrobeStub() {
               </Button>
             </div>
           ) : batchFiles.length > 0 ? (
-            <div className="mt-6 space-y-6">
+            <div className="mt-6">
               {batchProgress ? (
                 <div className="space-y-3">
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -473,41 +469,59 @@ export default function WardrobeStub() {
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-muted-foreground">
-                    {batchFiles.length} photos selected. Pick a category that applies to most of them — you can adjust individual items afterward.
-                  </p>
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
-                      Category for all
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {CATEGORIES.map((c) => {
-                        const selected = batchCategory === c;
-                        return (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setBatchCategory(c)}
-                            className={cn(
-                              "px-4 py-2 rounded-full text-sm border transition",
-                              selected
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background text-foreground border-border hover:border-primary/40",
-                            )}
-                          >
-                            {c}
-                          </button>
-                        );
-                      })}
-                    </div>
+                  {/* Per-item list */}
+                  <div className="space-y-6 max-h-[55vh] overflow-y-auto pr-1 pb-2">
+                    {batchFiles.map((_, i) => (
+                      <div key={i}>
+                        <div className="aspect-square w-full overflow-hidden rounded-sm bg-muted">
+                          {batchPreviews[i] && (
+                            <img
+                              src={batchPreviews[i]}
+                              alt={`Photo ${i + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {CATEGORIES.map((c) => {
+                            const selected = batchCategories[i] === c;
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() =>
+                                  setBatchCategories((prev) =>
+                                    prev.map((cat, idx) => (idx === i ? c : cat)),
+                                  )
+                                }
+                                className={cn(
+                                  "px-3 py-1.5 rounded-full text-xs border transition",
+                                  selected
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background text-foreground border-border hover:border-primary/40",
+                                )}
+                              >
+                                {c}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <Button
-                    onClick={onBatchUpload}
-                    disabled={!batchCategory}
-                    className="rounded-sm h-12 w-full"
-                  >
-                    Upload {batchFiles.length} items
-                  </Button>
+                  {/* Footer */}
+                  <div className="mt-4">
+                    <p className="text-xs text-center text-muted-foreground mb-3">
+                      {batchCategories.filter(Boolean).length} of {batchFiles.length} categorised
+                    </p>
+                    <Button
+                      onClick={onBatchUpload}
+                      disabled={batchCategories.some((c) => !c)}
+                      className="rounded-sm h-12 w-full"
+                    >
+                      Analyse all {batchFiles.length} items
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
