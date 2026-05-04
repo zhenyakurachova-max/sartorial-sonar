@@ -5,7 +5,7 @@
  */
 
 export const copy = {
-  brand: "Atelier",
+  brand: "Atylier",
 
   signup: {
     heading: "Let's see what's in your wardrobe.",

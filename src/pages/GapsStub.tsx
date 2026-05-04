@@ -109,7 +109,7 @@ export default function GapsStub() {
             <p className="text-muted-foreground text-pretty">
               Add at least 3 items to your wardrobe and get them analysed first.
             </p>
-            <Button onClick={() => navigate("/app/wardrobe")} className="mt-6 rounded-sm h-11">
+            <Button onClick={() => navigate("/app/audit")} className="mt-6 rounded-sm h-11">
               Go to wardrobe
             </Button>
           </div>
@@ -138,7 +138,7 @@ export default function GapsStub() {
                   </div>
                   <p className="mt-2 text-muted-foreground text-pretty">{g.description}</p>
                   <Button asChild className="mt-5 h-10 rounded-sm">
-                    <Link to="/app/recommendations" state={{ gap: g }}>
+                    <Link to="/app/buy" state={{ gap: g }}>
                       <ShoppingBag className="mr-2 h-4 w-4" /> What to buy next.
                     </Link>
                   </Button>

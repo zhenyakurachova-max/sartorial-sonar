@@ -1,4 +1,4 @@
-// Atelier interview edge function — synthesises 10 answers into a style profile.
+// Atylier interview edge function — synthesises 10 answers into a style profile.
 // Calls Anthropic Claude directly with tool-use for structured output.
 
 const corsHeaders = {

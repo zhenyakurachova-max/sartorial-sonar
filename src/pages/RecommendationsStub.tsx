@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, ShoppingBag } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,7 @@ type Recommendation = {
   reason: string;
   price_eur: string;
   search_query: string;
+  affiliate_url: string | null;
 };
 
 export default function RecommendationsStub() {
@@ -86,11 +87,19 @@ export default function RecommendationsStub() {
             <div style={{ display: "flex", gap: "16px", marginTop: "12px" }}>
               {recommendations.map((rec, i) => (
                 <div key={`btn-${rec.designer}-${i}`} style={{ flex: 1 }}>
-                  <Button asChild className="h-10 w-full rounded-sm">
-                    <a href={`https://www.google.com/search?q=${encodeURIComponent(rec.search_query)}`} target="_blank" rel="noreferrer">
-                      <Search className="mr-2 h-4 w-4" /> Find this piece
-                    </a>
-                  </Button>
+                  {rec.affiliate_url ? (
+                    <Button asChild className="h-10 w-full rounded-sm">
+                      <a href={rec.affiliate_url} target="_blank" rel="noreferrer">
+                        <ShoppingBag className="mr-2 h-4 w-4" /> Shop now
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button asChild className="h-10 w-full rounded-sm">
+                      <a href={`https://www.google.com/search?q=${encodeURIComponent(rec.search_query)}`} target="_blank" rel="noreferrer">
+                        <Search className="mr-2 h-4 w-4" /> Find this piece
+                      </a>
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

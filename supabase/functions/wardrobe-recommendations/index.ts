@@ -14,8 +14,7 @@ const TOOL = {
     properties: {
       recommendations: {
         type: "array",
-        minItems: 3,
-        maxItems: 3,
+        description: "Exactly three recommendations.",
         items: {
           type: "object",
           properties: {
@@ -85,8 +84,18 @@ Use real designers or brands, concrete piece names, approximate EUR pricing, and
     if (!resp.ok) return new Response(JSON.stringify({ error: "Claude error: " + JSON.stringify(data) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const toolUse = Array.isArray(data?.content) ? data.content.find((b: any) => b.type === "tool_use") : null;
-    const recommendations = toolUse?.input?.recommendations;
-    if (!Array.isArray(recommendations)) return new Response(JSON.stringify({ error: "No recommendations returned" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const rawRecs = toolUse?.input?.recommendations;
+    if (!Array.isArray(rawRecs)) return new Response(JSON.stringify({ error: "No recommendations returned" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Add affiliate_url field (null until wired to affiliate program)
+    const recommendations = rawRecs.map((r: any) => ({
+      designer: r.designer,
+      piece_name: r.piece_name,
+      reason: r.reason,
+      price_eur: r.price_eur,
+      search_query: r.search_query,
+      affiliate_url: null as string | null,
+    }));
 
     return new Response(JSON.stringify({ recommendations }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

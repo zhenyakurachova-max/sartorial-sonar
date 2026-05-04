@@ -202,7 +202,7 @@ export default function InterviewComplete() {
             </div>
 
             <Button asChild className="mt-12 rounded-sm h-12 w-full">
-              <Link to="/app/wardrobe">{copy.complete.cta}</Link>
+              <Link to="/app/audit">{copy.complete.cta}</Link>
             </Button>
             <button
               type="button"

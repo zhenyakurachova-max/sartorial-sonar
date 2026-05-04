@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, X, Camera, Image as ImageIcon, Loader2, LockKeyhole } from "lucide-react";
+import { Plus, X, Camera, Image as ImageIcon, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BrandMark } from "@/components/BrandMark";
-import { copy } from "@/lib/copy";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +40,7 @@ const CATEGORIES = ["Top", "Bottom", "Dress", "Outerwear", "Shoes", "Bag", "Acce
 type Category = (typeof CATEGORIES)[number];
 
 const ANALYSIS_TIMEOUT_MS = 30_000;
-const FREE_ANALYSED_LIMIT = 10;
+const FILE_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB
 
 const isVerdict = (value: unknown): value is Verdict =>
   value === "keep" || value === "dump" || value === "gap";
@@ -59,17 +58,23 @@ export default function WardrobeStub() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
-  const [paywallOpen, setPaywallOpen] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  // Pending upload state (after photo chosen, before category picked)
+  // Single-file pending state
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [pendingCategory, setPendingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fileTooLarge, setFileTooLarge] = useState(false);
+
+  // Batch upload state
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [batchCategory, setBatchCategory] = useState<Category | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Stale pending items
   const [staleIds, setStaleIds] = useState<Set<string>>(new Set());
   const pendingSince = useRef<Record<string, number>>({});
 
@@ -88,9 +93,7 @@ export default function WardrobeStub() {
       setItems((data ?? []) as Item[]);
       setLoading(false);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user]);
 
   // Sign URLs for thumbnails whenever items change
@@ -109,21 +112,17 @@ export default function WardrobeStub() {
       if (cancelled) return;
       if (Object.keys(next).length) setUrls((u) => ({ ...u, ...next }));
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Track when items enter "pending" and expose staleIds after 30 s
+  // Track stale pending items
   useEffect(() => {
     const itemIds = new Set(items.map((i) => i.id));
-    // Remove entries for items that no longer exist
     Object.keys(pendingSince.current).forEach((id) => {
       if (!itemIds.has(id)) delete pendingSince.current[id];
     });
     items.forEach((item) => {
       if (item.status === "pending" && !pendingSince.current[item.id]) {
-        // Use created_at so DB-loaded stuck items are immediately stale
         pendingSince.current[item.id] = new Date(item.created_at).getTime();
       } else if (item.status !== "pending") {
         delete pendingSince.current[item.id];
@@ -148,7 +147,7 @@ export default function WardrobeStub() {
 
   const onFileChosen = (file: File | null) => {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > FILE_SIZE_LIMIT) {
       setFileTooLarge(true);
       return;
     }
@@ -166,19 +165,12 @@ export default function WardrobeStub() {
     setPendingCategory(null);
     setSubmitting(false);
     setFileTooLarge(false);
+    setBatchFiles([]);
+    setBatchCategory(null);
+    setBatchProgress(null);
   };
 
   const runAnalysis = async (itemId: string) => {
-    const analysedBeforeThis = items.filter((i) => i.status === "analysed" && i.id !== itemId).length;
-    if (analysedBeforeThis >= FREE_ANALYSED_LIMIT) {
-      console.warn("[analyse-item] paywall gate reached", { itemId, analysedBeforeThis });
-      setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" as const } : it)));
-      setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" as const } : current));
-      setPaywallOpen(true);
-      return;
-    }
-
-    console.log("[analyse-item] invoking for item:", itemId);
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
     );
@@ -195,24 +187,15 @@ export default function WardrobeStub() {
           body: { item_id: itemId },
           headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
         }),
-        analysisTimeout().catch((e) => {
-          timedOut = true;
-          throw e;
-        }),
+        analysisTimeout().catch((e) => { timedOut = true; throw e; }),
       ]);
-      console.log("[analyse-item] raw response:", response);
-      console.log("[analyse-item] response.error:", response?.error ?? null);
       data = (response?.data ?? null) as AnalysisResult | null;
       error = response?.error ?? null;
     } catch (e: any) {
-      console.error("[analyse-item] threw:", e);
       error = e;
     }
 
-    console.log("[analyse-item] parsed data:", data, "error:", error);
-
     const applyAnalysedItem = (nextItem: Item) => {
-      console.log("[analyse-item] applying item to UI:", nextItem);
       setItems((prev) => prev.map((it) => (it.id === itemId ? nextItem : it)));
       setDetailItem((current) => (current?.id === itemId ? nextItem : current));
     };
@@ -241,15 +224,12 @@ export default function WardrobeStub() {
       applyAnalysedItem(data as unknown as Item);
       return;
     } else if (!isVerdict(data?.verdict)) {
-      // Fallback: re-fetch the item from DB in case the function wrote results but
-      // the response payload shape was unexpected.
       const { data: refreshed } = await supabase
         .from("wardrobe_items")
         .select("id, image_path, category, status, verdict, reason, tags, created_at")
         .eq("id", itemId)
         .single();
       if (refreshed && refreshed.status === "analysed" && isVerdict(refreshed.verdict)) {
-        console.log("[analyse-item] recovered from DB:", refreshed);
         applyAnalysedItem(refreshed as Item);
         return;
       }
@@ -257,15 +237,9 @@ export default function WardrobeStub() {
     }
 
     if (errMessage) {
-      console.error("[analyse-item] failed:", errMessage);
-      setItems((prev) =>
-        prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)),
-      );
+      setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)));
       setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" } : current));
-      toast({
-        title: "Couldn't analyse that photo",
-        description: errMessage,
-      });
+      toast({ title: "Couldn't analyse that photo", description: errMessage });
       return;
     }
 
@@ -273,10 +247,8 @@ export default function WardrobeStub() {
     const reason = data!.reason ?? null;
     const tags = data!.tags ?? [];
     const analysedItem: Item | null = data?.item && data.item.id === itemId ? data.item : null;
-    console.log("[analyse-item] success — updating UI:", { itemId, verdict, analysedItem });
     const fallbackItem = items.find((it) => it.id === itemId);
     const nextItem = analysedItem ?? (fallbackItem ? { ...fallbackItem, status: "analysed" as const, verdict, reason, tags } : null);
-
     if (nextItem) applyAnalysedItem(nextItem);
   };
 
@@ -292,44 +264,81 @@ export default function WardrobeStub() {
     setDetailItem(null);
   };
 
+  const uploadFile = async (file: File, category: Category): Promise<Item> => {
+    const mimeType = file.type || "image/jpeg";
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${user!.id}/${crypto.randomUUID()}.${ext}`;
+
+    // Read as ArrayBuffer for iOS Safari compatibility
+    const buffer = await file.arrayBuffer();
+    const { error: upErr } = await supabase.storage
+      .from("wardrobe")
+      .upload(path, buffer, { contentType: mimeType });
+    if (upErr) throw new Error(upErr.message || "Upload failed");
+
+    const { data: inserted, error: insErr } = await supabase
+      .from("wardrobe_items")
+      .insert({ user_id: user!.id, image_path: path, category, status: "pending" })
+      .select("id, image_path, category, status, verdict, reason, tags, created_at")
+      .single();
+    if (insErr) throw new Error(insErr.message || "Failed to save item");
+
+    return inserted as Item;
+  };
+
   const onAnalyse = async () => {
     if (!user || !pendingFile || !pendingCategory) return;
     setSubmitting(true);
     try {
-      const ext = (pendingFile.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("wardrobe")
-        .upload(path, pendingFile, { contentType: pendingFile.type || "image/jpeg" });
-      if (upErr) throw upErr;
-
-      const { data: inserted, error: insErr } = await supabase
-        .from("wardrobe_items")
-        .insert({
-          user_id: user.id,
-          image_path: path,
-          category: pendingCategory,
-          status: "pending",
-        })
-        .select("id, image_path, category, status, verdict, reason, tags, created_at")
-        .single();
-      if (insErr) throw insErr;
-
-      const newItem = inserted as Item;
+      const newItem = await uploadFile(pendingFile, pendingCategory);
       setItems((prev) => [newItem, ...prev]);
       resetAddSheet();
-
       runAnalysis(newItem.id);
     } catch (e: any) {
-      console.error("[wardrobe] add item", e);
-      toast({ title: "Couldn't add that item", description: e?.message ?? "Try again." });
+      const msg = e?.message === "Failed to fetch"
+        ? "Network error. Check your connection and try again."
+        : (e?.message || "Upload failed. Please try again.");
+      toast({ title: "Couldn't add that item", description: msg });
       setSubmitting(false);
+    }
+  };
+
+  const onBatchUpload = async () => {
+    if (!user || !batchCategory || batchFiles.length === 0) return;
+    setSubmitting(true);
+    setBatchProgress({ done: 0, total: batchFiles.length });
+
+    const newItems: Item[] = [];
+    let failed = 0;
+
+    for (let i = 0; i < batchFiles.length; i++) {
+      try {
+        const newItem = await uploadFile(batchFiles[i], batchCategory);
+        newItems.push(newItem);
+        setItems((prev) => [newItem, ...prev]);
+      } catch (e: any) {
+        console.error(`[batch] failed file ${i}`, e);
+        failed++;
+      }
+      setBatchProgress({ done: i + 1, total: batchFiles.length });
+    }
+
+    resetAddSheet();
+
+    if (failed > 0) {
+      toast({
+        title: "Some uploads failed",
+        description: `${newItems.length} of ${batchFiles.length} items uploaded.`,
+      });
+    }
+
+    for (const item of newItems) {
+      runAnalysis(item.id);
     }
   };
 
   const analysedCount = items.filter((i) => i.status === "analysed").length;
   const showGapsBanner = analysedCount >= 3;
-
   const hasItems = items.length > 0;
 
   return (
@@ -339,7 +348,7 @@ export default function WardrobeStub() {
       </header>
 
       <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
-        <h1 className="font-serif text-3xl">Your wardrobe.</h1>
+        <h1 className="font-serif text-3xl">Your audit.</h1>
 
         {loading ? (
           <div className="mt-16 flex justify-center">
@@ -350,10 +359,7 @@ export default function WardrobeStub() {
             <p className="text-muted-foreground text-pretty">
               Nothing here yet. Start by photographing something you own — one piece at a time.
             </p>
-            <Button
-              onClick={() => setAddOpen(true)}
-              className="mt-10 rounded-sm h-12 w-full"
-            >
+            <Button onClick={() => setAddOpen(true)} className="mt-10 rounded-sm h-12 w-full">
               Add your first item
             </Button>
           </div>
@@ -377,7 +383,7 @@ export default function WardrobeStub() {
           <div className="mt-12 rounded-sm border border-border bg-muted/40 px-5 py-5 flex items-center justify-between gap-4">
             <p className="font-serif text-lg leading-snug">Ready to see your gaps?</p>
             <Link
-              to="/app/gaps"
+              to="/app/wardrobe"
               className="shrink-0 inline-flex items-center justify-center rounded-sm bg-primary text-primary-foreground h-10 px-4 text-sm"
             >
               See my results
@@ -386,7 +392,7 @@ export default function WardrobeStub() {
         )}
       </section>
 
-      {hasItems && (
+      {hasItems && !submitting && (
         <button
           onClick={() => setAddOpen(true)}
           aria-label="Add item"
@@ -397,30 +403,6 @@ export default function WardrobeStub() {
         </button>
       )}
 
-      {paywallOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 px-6">
-          <div className="w-full max-w-sm text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-primary">
-              <LockKeyhole className="h-5 w-5" />
-            </div>
-            <h2 className="mt-6 font-serif text-3xl leading-tight text-balance">You've audited 10 pieces.</h2>
-            <p className="mt-4 text-muted-foreground text-pretty">
-              Unlock your full wardrobe audit for a one-time payment of €29.
-            </p>
-            <Button className="mt-8 h-12 w-full rounded-sm" onClick={() => setPaywallOpen(false)}>
-              Unlock for €29
-            </Button>
-            <button
-              type="button"
-              onClick={() => setPaywallOpen(false)}
-              className="mt-4 text-sm text-muted-foreground underline underline-offset-4"
-            >
-              Not now
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Hidden file inputs */}
       <input
         ref={cameraInputRef}
@@ -428,14 +410,29 @@ export default function WardrobeStub() {
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          onFileChosen(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
       />
       <input
         ref={galleryInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          if (!files.length) return;
+          if (files.length === 1) {
+            onFileChosen(files[0]);
+          } else {
+            setFileTooLarge(false);
+            setBatchFiles(files);
+            setAddOpen(true);
+          }
+        }}
       />
 
       {/* Add item bottom sheet */}
@@ -443,18 +440,76 @@ export default function WardrobeStub() {
         <SheetContent side="bottom" className="rounded-t-xl bg-background border-border p-6 max-h-[92vh] overflow-y-auto">
           <SheetHeader className="text-left">
             <SheetTitle className="font-serif text-2xl font-normal">
-              {pendingPreview ? "Categorise this piece" : "Add an item"}
+              {batchFiles.length > 0
+                ? `Upload ${batchFiles.length} items`
+                : pendingPreview
+                  ? "Categorise this piece"
+                  : "Add an item"}
             </SheetTitle>
           </SheetHeader>
 
           {fileTooLarge ? (
             <div className="mt-6 space-y-4">
               <p className="text-sm text-destructive">
-                This photo is too large. Please use a smaller image.
+                This photo is too large (over 50 MB). Please use a smaller image.
               </p>
               <Button variant="outline" onClick={resetAddSheet} className="rounded-sm h-12 w-full">
-                Remove
+                Dismiss
               </Button>
+            </div>
+          ) : batchFiles.length > 0 ? (
+            <div className="mt-6 space-y-6">
+              {batchProgress ? (
+                <div className="space-y-3">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-center text-muted-foreground">
+                    {batchProgress.done} of {batchProgress.total} uploaded
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {batchFiles.length} photos selected. Pick a category that applies to most of them — you can adjust individual items afterward.
+                  </p>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                      Category for all
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORIES.map((c) => {
+                        const selected = batchCategory === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setBatchCategory(c)}
+                            className={cn(
+                              "px-4 py-2 rounded-full text-sm border transition",
+                              selected
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background text-foreground border-border hover:border-primary/40",
+                            )}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={onBatchUpload}
+                    disabled={!batchCategory}
+                    className="rounded-sm h-12 w-full"
+                  >
+                    Upload {batchFiles.length} items
+                  </Button>
+                </>
+              )}
             </div>
           ) : !pendingPreview ? (
             <div className="mt-6 space-y-3">
@@ -518,10 +573,7 @@ export default function WardrobeStub() {
       </Sheet>
 
       {/* Item detail drawer */}
-      <Sheet
-        open={!!detailItem}
-        onOpenChange={(o) => !o && setDetailItem(null)}
-      >
+      <Sheet open={!!detailItem} onOpenChange={(o) => !o && setDetailItem(null)}>
         <SheetContent
           side="bottom"
           className="rounded-t-xl bg-background border-border p-0 max-h-[92vh] overflow-y-auto"
@@ -531,10 +583,7 @@ export default function WardrobeStub() {
               item={detailItem}
               src={urls[detailItem.image_path]}
               onClose={() => setDetailItem(null)}
-              onRetry={() => {
-                onRetry(detailItem.id);
-                setDetailItem(null);
-              }}
+              onRetry={() => { onRetry(detailItem.id); setDetailItem(null); }}
               onDelete={() => onDelete(detailItem.id)}
             />
           )}
@@ -545,19 +594,9 @@ export default function WardrobeStub() {
 }
 
 function ItemTile({
-  item,
-  src,
-  onClick,
-  onRetry,
-  onRemove,
-  isStale,
+  item, src, onClick, onRetry, onRemove, isStale,
 }: {
-  item: Item;
-  src?: string;
-  onClick: () => void;
-  onRetry: () => void;
-  onRemove: () => void;
-  isStale: boolean;
+  item: Item; src?: string; onClick: () => void; onRetry: () => void; onRemove: () => void; isStale: boolean;
 }) {
   const showRemove = item.status === "failed" || (item.status === "pending" && isStale);
   return (
@@ -568,11 +607,7 @@ function ItemTile({
         aria-label={`View ${item.category}`}
       >
         {src ? (
-          <img
-            src={src}
-            alt={item.category}
-            className="h-full w-full object-cover transition group-active:scale-[0.98]"
-          />
+          <img src={src} alt={item.category} className="h-full w-full object-cover transition group-active:scale-[0.98]" />
         ) : (
           <div className="h-full w-full bg-muted" />
         )}
@@ -630,26 +665,16 @@ function VerdictPill({ verdict, large = false }: { verdict: Verdict; large?: boo
 }
 
 function ItemDetail({
-  item,
-  src,
-  onClose,
-  onRetry,
-  onDelete,
+  item, src, onClose, onRetry, onDelete,
 }: {
-  item: Item;
-  src?: string;
-  onClose: () => void;
-  onRetry: () => void;
-  onDelete: () => void;
+  item: Item; src?: string; onClose: () => void; onRetry: () => void; onDelete: () => void;
 }) {
   const [styleOpen, setStyleOpen] = useState(false);
   return (
     <div>
       <div className="relative">
         <div className="aspect-square w-full bg-muted overflow-hidden">
-          {src ? (
-            <img src={src} alt={item.category} className="h-full w-full object-cover" />
-          ) : null}
+          {src ? <img src={src} alt={item.category} className="h-full w-full object-cover" /> : null}
         </div>
         <button
           onClick={onClose}
@@ -662,9 +687,7 @@ function ItemDetail({
 
       <div className="px-6 py-6 space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            {item.category}
-          </p>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">{item.category}</p>
           {item.status === "analysed" && item.verdict && (
             <VerdictPill verdict={item.verdict} large />
           )}
@@ -684,29 +707,19 @@ function ItemDetail({
         </div>
 
         {item.reason && (
-          <p className="font-serif text-lg italic leading-snug text-pretty">
-            {item.reason}
-          </p>
+          <p className="font-serif text-lg italic leading-snug text-pretty">{item.reason}</p>
         )}
 
         {item.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2">
             {item.tags.map((t) => (
-              <span
-                key={t}
-                className="px-2.5 py-1 text-xs rounded-full bg-muted text-muted-foreground"
-              >
-                {t}
-              </span>
+              <span key={t} className="px-2.5 py-1 text-xs rounded-full bg-muted text-muted-foreground">{t}</span>
             ))}
           </div>
         )}
 
         {item.status === "analysed" && (
-          <Button
-            onClick={() => setStyleOpen(true)}
-            className="mt-4 rounded-sm h-12 w-full"
-          >
+          <Button onClick={() => setStyleOpen(true)} className="mt-4 rounded-sm h-12 w-full">
             Style this
           </Button>
         )}
@@ -730,11 +743,7 @@ function ItemDetail({
           <p className="mt-4 text-muted-foreground">
             We'll style this piece with the rest of your wardrobe in a moment.
           </p>
-          <Button
-            onClick={() => setStyleOpen(false)}
-            variant="ghost"
-            className="mt-6 w-full"
-          >
+          <Button onClick={() => setStyleOpen(false)} variant="ghost" className="mt-6 w-full">
             Close
           </Button>
         </SheetContent>
