@@ -66,7 +66,7 @@ verdict must be exactly one of: keep, dump, gap
         model: "claude-sonnet-4-6",
         max_tokens: 256,
         system: systemPrompt,
-        messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: `Category: ${item.category}. Give verdict.` }] }]
+        messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: `Category: ${item.category}.${item.brand ? ` Brand: ${item.brand}.` : ""} Give verdict.` }] }]
       })
     });
 

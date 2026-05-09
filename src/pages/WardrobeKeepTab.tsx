@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, ShoppingBag, X } from "lucide-react";
+import { Loader2, Search, ShoppingBag, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandMark } from "@/components/BrandMark";
@@ -28,6 +28,8 @@ export default function WardrobeKeepTab() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [loading, setLoading] = useState(true);
+  const [findingGaps, setFindingGaps] = useState(false);
+  const [gapError, setGapError] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<KeepItem | null>(null);
 
   useEffect(() => {
@@ -73,6 +75,23 @@ export default function WardrobeKeepTab() {
     })();
     return () => { cancelled = true; };
   }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const findGaps = async () => {
+    setFindingGaps(true);
+    setGapError(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("wardrobe-gaps", {
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+    });
+    setFindingGaps(false);
+    if (error || data?.error) {
+      const msg = data?.error ?? error?.message ?? "Couldn't analyse gaps.";
+      const text = typeof msg === "string" ? msg : JSON.stringify(msg);
+      setGapError(text.includes("3") ? "Analyse at least 3 wardrobe items first." : text);
+      return;
+    }
+    setGaps((data?.gaps ?? []) as Gap[]);
+  };
 
   const onDelete = async (itemId: string) => {
     if (!confirm("Remove this item from your wardrobe?")) return;
@@ -128,6 +147,26 @@ export default function WardrobeKeepTab() {
               </div>
             )}
 
+            {items.length > 0 && gaps.length === 0 && (
+              <div className="mt-14">
+                <h2 className="font-serif text-2xl">What you're missing.</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Find the gaps in your wardrobe based on what you've kept.
+                </p>
+                <Button
+                  onClick={findGaps}
+                  disabled={findingGaps}
+                  className="mt-4 h-10 rounded-sm"
+                >
+                  {findingGaps && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {findingGaps ? "Analysing…" : "Find my gaps"}
+                </Button>
+                {gapError && (
+                  <p className="mt-3 text-sm text-destructive">{gapError}</p>
+                )}
+              </div>
+            )}
+
             {gaps.length > 0 && (
               <div className="mt-14">
                 <h2 className="font-serif text-2xl">What you're missing.</h2>
@@ -147,6 +186,15 @@ export default function WardrobeKeepTab() {
                     </article>
                   ))}
                 </div>
+                <Button
+                  variant="ghost"
+                  onClick={findGaps}
+                  disabled={findingGaps}
+                  className="mt-6 w-full rounded-sm text-muted-foreground"
+                >
+                  {findingGaps && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {findingGaps ? "Refreshing…" : <><Search className="mr-2 h-4 w-4" />Refresh gaps</>}
+                </Button>
               </div>
             )}
           </>
