@@ -42,6 +42,7 @@ type Category = (typeof CATEGORIES)[number];
 
 const ANALYSIS_TIMEOUT_MS = 30_000;
 const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
+const ITEM_CAP = 150;
 const ITEM_SELECT = "id, image_path, category, brand, status, verdict, reason, tags, created_at";
 
 const isVerdict = (value: unknown): value is Verdict =>
@@ -308,6 +309,11 @@ export default function WardrobeStub() {
 
   const onAnalyse = async () => {
     if (!user || !pendingFile || !pendingCategory) return;
+    if (items.length >= ITEM_CAP) {
+      toast({ title: "Wardrobe full", description: `You've reached the ${ITEM_CAP}-item limit for the beta.` });
+      resetAddSheet();
+      return;
+    }
     setSubmitting(true);
     try {
       const newItem = await uploadFile(pendingFile, pendingCategory);
@@ -325,20 +331,27 @@ export default function WardrobeStub() {
 
   const onBatchUpload = async () => {
     if (!user || batchFiles.length === 0 || batchCategories.some((c) => !c)) return;
+    const remaining = ITEM_CAP - items.length;
+    if (remaining <= 0) {
+      toast({ title: "Wardrobe full", description: `You've reached the ${ITEM_CAP}-item limit for the beta.` });
+      resetAddSheet();
+      return;
+    }
     setSubmitting(true);
-    setBatchProgress({ done: 0, total: batchFiles.length });
+    setBatchProgress({ done: 0, total: Math.min(batchFiles.length, remaining) });
     const newItems: Item[] = [];
     let failed = 0;
-    for (let i = 0; i < batchFiles.length; i++) {
+    const filesToUpload = batchFiles.slice(0, remaining);
+    for (let i = 0; i < filesToUpload.length; i++) {
       try {
-        const newItem = await uploadFile(batchFiles[i], batchCategories[i]!);
+        const newItem = await uploadFile(filesToUpload[i], batchCategories[i]!);
         newItems.push(newItem);
         setItems((prev) => [newItem, ...prev]);
       } catch (e: any) {
         console.error(`[batch] failed file ${i}`, e);
         failed++;
       }
-      setBatchProgress({ done: i + 1, total: batchFiles.length });
+      setBatchProgress({ done: i + 1, total: filesToUpload.length });
     }
     resetAddSheet();
     if (failed > 0) {
@@ -348,6 +361,7 @@ export default function WardrobeStub() {
   };
 
   const hasItems = items.length > 0;
+  const atCap = items.length >= ITEM_CAP;
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
@@ -356,7 +370,14 @@ export default function WardrobeStub() {
       </header>
 
       <section className="flex-1 px-6 pt-10 pb-24 max-w-2xl mx-auto w-full">
-        <h1 className="font-serif text-3xl">Your audit.</h1>
+        <div className="flex items-baseline justify-between">
+          <h1 className="font-serif text-3xl">Your audit.</h1>
+          {hasItems && (
+            <span className="text-xs text-muted-foreground">
+              {items.length} of {ITEM_CAP}
+            </span>
+          )}
+        </div>
 
         {loading ? (
           <div className="mt-16 flex justify-center">
@@ -395,7 +416,7 @@ export default function WardrobeStub() {
         )}
       </section>
 
-      {hasItems && !submitting && (
+      {hasItems && !submitting && !atCap && (
         <button
           onClick={() => setAddOpen(true)}
           aria-label="Add item"

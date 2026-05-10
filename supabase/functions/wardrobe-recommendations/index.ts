@@ -6,6 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function currencySymbol(c: string | null): string {
+  if (!c) return "€";
+  if (c.includes("GBP")) return "£";
+  if (c.includes("USD")) return "$";
+  if (c.includes("AED")) return "AED ";
+  return "€";
+}
+
 function proportionsNote(p: string): string {
   if (!p) return "";
   const low = p.toLowerCase();
@@ -73,6 +81,7 @@ Deno.serve(async (req: Request) => {
     if (!apiKey) return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const propNote = proportionsNote(profile?.proportions || "");
+    const sym = currencySymbol(profile?.currency);
 
     const systemPrompt = `You are a senior personal shopper. Recommend exactly three specific pieces for this wardrobe gap.
 
@@ -83,9 +92,10 @@ Palette: ${(profile?.colour_palette || []).join(", ") || "—"}
 Avoid: ${(profile?.avoid_list || []).join(", ") || "—"}
 Body notes: ${profile?.body_notes || "—"}
 ${propNote ? `Proportions insight: ${propNote}` : ""}
-Budget per piece: €${profile?.budget_ceiling || "—"}
+Budget per piece: ${sym}${profile?.budget_ceiling || "—"}
+${profile?.style_rules ? `Hard constraints — cuts/styles that do not work for the client: ${profile.style_rules}` : ""}
 
-Use real designers or brands, concrete piece names, approximate EUR pricing, and searchable wording. Keep reasons under 18 words.`;
+Use real designers or brands, concrete piece names, and approximate pricing in ${sym === "€" ? "EUR (€)" : sym === "£" ? "GBP (£)" : sym === "$" ? "USD ($)" : "AED"}. Keep reasons under 18 words.`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

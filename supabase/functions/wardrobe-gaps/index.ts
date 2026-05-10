@@ -6,6 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function currencySymbol(c: string | null): string {
+  if (!c) return "€";
+  if (c.includes("GBP")) return "£";
+  if (c.includes("USD")) return "$";
+  if (c.includes("AED")) return "AED ";
+  return "€";
+}
+
 function proportionsNote(p: string): string {
   if (!p) return "";
   const low = p.toLowerCase();
@@ -81,6 +89,7 @@ Deno.serve(async (req: Request) => {
 
     const propNote = proportionsNote(profile?.proportions || "");
 
+    const sym = currencySymbol(profile?.currency);
     const systemPrompt = `You are a senior personal stylist. Identify the 3-5 most important gaps in this client's wardrobe. Be specific, not generic — name actual garments.
 
 CLIENT PROFILE
@@ -90,7 +99,8 @@ Palette: ${(profile?.colour_palette || []).join(", ") || "—"}
 Avoid: ${(profile?.avoid_list || []).join(", ") || "—"}
 Body notes: ${profile?.body_notes || "—"}
 ${propNote ? `Proportions insight: ${propNote}` : ""}
-Budget per piece: €${profile?.budget_ceiling || "—"}
+Budget per piece: ${sym}${profile?.budget_ceiling || "—"}
+${profile?.style_rules ? `Hard constraints — cuts/styles that do not work for the client: ${profile.style_rules}` : ""}
 
 Banned words: effortless, chic, elevate, elevated, timeless, versatile, seamless, fashion-forward, curated, polished, sophisticated, must-have, statement piece, capsule.`;
 

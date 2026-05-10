@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { APPROVED_EMAILS } from "@/lib/approved-emails";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,11 +11,20 @@ import { copy } from "@/lib/copy";
 
 const REDIRECT_TO = `${window.location.origin}/app/interview`;
 
+function isApproved(email: string): boolean {
+  if (APPROVED_EMAILS.length === 0) return true;
+  return APPROVED_EMAILS.includes(email.trim().toLowerCase());
+}
+
 export default function Signup() {
   const { session, loading } = useAuth();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [waitlisted, setWaitlisted] = useState(
+    new URLSearchParams(location.search).get("waitlisted") === "1",
+  );
   const [error, setError] = useState<string | null>(null);
 
   if (!loading && session) return <Navigate to="/app/interview" replace />;
@@ -22,6 +32,10 @@ export default function Signup() {
   const sendMagicLink = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!isApproved(email)) {
+      setWaitlisted(true);
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
@@ -49,7 +63,21 @@ export default function Signup() {
 
       <section className="flex-1 flex items-start justify-center px-6 pt-16 pb-12">
         <div className="w-full max-w-sm">
-          {sent ? (
+          {waitlisted ? (
+            <>
+              <h1 className="font-serif text-3xl text-balance">You're on the list.</h1>
+              <p className="mt-4 text-muted-foreground">
+                Atylier is currently invite-only. We'll be in touch when a spot opens up.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setWaitlisted(false); setEmail(""); }}
+                className="mt-8 text-sm underline underline-offset-4 text-primary"
+              >
+                Try a different email
+              </button>
+            </>
+          ) : sent ? (
             <>
               <h1 className="font-serif text-3xl text-balance">{copy.signup.sentHeading}</h1>
               <p className="mt-4 text-muted-foreground">{copy.signup.sentBody}</p>

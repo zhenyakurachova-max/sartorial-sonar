@@ -74,6 +74,7 @@ Style summary: ${profile?.style_summary || "—"}
 Archetypes: ${(profile?.style_archetypes || []).join(", ") || "—"}
 Palette: ${(profile?.colour_palette || []).join(", ") || "—"}
 Proportions: ${profile?.proportions || "—"}
+${profile?.style_rules ? `Hard constraints — cuts/styles that do not work for the client: ${profile.style_rules}` : ""}
 
 RULES
 - Only use items that appear in the list below. Do not invent items the client doesn't own.

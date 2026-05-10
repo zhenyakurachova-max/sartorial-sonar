@@ -1,6 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+function currencySymbol(c: string | null): string {
+  if (!c) return "€";
+  if (c.includes("GBP")) return "£";
+  if (c.includes("USD")) return "$";
+  if (c.includes("AED")) return "AED ";
+  return "€";
+}
+
 // Maps the client's stated proportions to a feature-based styling note.
 function proportionsNote(p: string): string {
   if (!p) return "";
@@ -73,7 +81,8 @@ Deno.serve(async (req: Request) => {
     if (!anthropicKey) { console.error("No ANTHROPIC_API_KEY"); return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: corsHeaders }); }
 
     const propNote = proportionsNote(profile?.proportions || "");
-    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}. Body notes: ${profile?.body_notes || "none"}.${propNote ? ` ${propNote}` : ""}
+    const styleRulesNote = profile?.style_rules ? ` Hard constraints (cuts/styles that do not work): ${profile.style_rules}.` : "";
+    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}. Body notes: ${profile?.body_notes || "none"}.${propNote ? ` ${propNote}` : ""}${styleRulesNote}
 
 Assess the clothing item in the photo. Return ONLY valid JSON, no markdown, no explanation:
 { "verdict": "keep", "reason": "one sentence max 20 words", "tags": ["tag1", "tag2"] }

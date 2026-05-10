@@ -11,10 +11,23 @@ import { copy } from "@/lib/copy";
 import {
   FIXED_QUESTIONS,
   FIXED_OPEN_QUESTIONS,
+  getCurrencySymbol,
+  getBudgetOptions,
+  CURRENCY_OPTIONS,
   type Question,
 } from "@/lib/interview-questions";
 
-const TOTAL = 11;
+const TOTAL = 13;
+
+function detectCurrency(): string {
+  try {
+    const lang = navigator.language ?? "";
+    if (lang.startsWith("en-GB")) return "GBP — £";
+    if (lang.startsWith("en-US")) return "USD — $";
+    if (lang.includes("-AE")) return "AED — AED";
+  } catch {}
+  return "EUR — €";
+}
 
 type StoredAnswer = { question_index: number; question: string; answer: string };
 
@@ -62,10 +75,23 @@ export default function Interview() {
     return () => { cancelled = true; };
   }, [user, navigate]);
 
+  // Auto-detect currency on Q0
+  useEffect(() => {
+    if (hydrating || currentIndex !== 0 || chosen !== null) return;
+    setChosen(detectCurrency());
+  }, [hydrating, currentIndex, chosen]);
+
   const progress = useMemo(
     () => Math.round((currentIndex / TOTAL) * 100),
     [currentIndex],
   );
+
+  // Budget question (index 2) options depend on currency chosen at Q0
+  const budgetOptions = useMemo(() => {
+    if (currentIndex !== 2) return null;
+    const currencyAns = answers.find((a) => a.question_index === 0)?.answer ?? chosen ?? "";
+    return getBudgetOptions(getCurrencySymbol(currencyAns));
+  }, [currentIndex, answers, chosen]);
 
   const currentFixed: Question | null =
     currentIndex < FIXED_QUESTIONS.length ? FIXED_QUESTIONS[currentIndex] : null;
@@ -200,7 +226,7 @@ export default function Interview() {
 
         {currentFixed?.kind === "choice" && (
           <div className="mt-8 space-y-3">
-            {currentFixed.options.map((opt) => (
+            {(budgetOptions ?? currentFixed.options).map((opt) => (
               <ChoiceChip
                 key={opt}
                 label={opt}

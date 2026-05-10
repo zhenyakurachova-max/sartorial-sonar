@@ -5,6 +5,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
+import { getCurrencySymbol } from "@/lib/interview-questions";
+
+const INTERVIEW_TOTAL = 13;
 
 type Profile = {
   style_summary: string | null;
@@ -13,6 +16,7 @@ type Profile = {
   avoid_list: string[];
   budget_ceiling: number | null;
   proportions: string | null;
+  currency: string | null;
   interview_complete: boolean;
 };
 
@@ -32,7 +36,7 @@ export default function InterviewComplete() {
       // 1. Check if profile already complete.
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
-        .select("style_summary, colour_palette, style_archetypes, avoid_list, budget_ceiling, proportions, interview_complete")
+        .select("style_summary, colour_palette, style_archetypes, avoid_list, budget_ceiling, proportions, currency, interview_complete")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled) return;
@@ -44,7 +48,7 @@ export default function InterviewComplete() {
         return;
       }
 
-      // 2. Need to synthesise. Make sure we have all 10 answers.
+      // 2. Need to synthesise. Make sure we have all answers.
       const { data: ans, error: ansErr } = await supabase
         .from("interview_answers")
         .select("question_index, question, answer")
@@ -54,7 +58,7 @@ export default function InterviewComplete() {
       if (ansErr) console.error("[complete] answers fetch", ansErr);
 
       const history = (ans ?? []) as StoredAnswer[];
-      if (history.length < 11) {
+      if (history.length < INTERVIEW_TOTAL) {
         setPhase("redirect");
         return;
       }
@@ -71,6 +75,10 @@ export default function InterviewComplete() {
         return;
       }
 
+      // Extract verbatim fields from raw answers (not synthesised by AI)
+      const currencyAns = history.find((h) => h.question_index === 0)?.answer ?? null;
+      const styleRulesAns = history.find((h) => h.question_index === 8)?.answer ?? null;
+
       const p = data.profile;
       const { error: upErr } = await supabase
         .from("profiles")
@@ -82,6 +90,8 @@ export default function InterviewComplete() {
           body_notes: p.body_notes ?? null,
           proportions: p.proportions ?? null,
           budget_ceiling: p.budget_ceiling ?? null,
+          currency: currencyAns,
+          style_rules: styleRulesAns,
           interview_complete: true,
         })
         .eq("id", user.id);
@@ -100,6 +110,7 @@ export default function InterviewComplete() {
         avoid_list: p.avoid_list ?? [],
         budget_ceiling: p.budget_ceiling ?? null,
         proportions: p.proportions ?? null,
+        currency: currencyAns,
         interview_complete: true,
       });
       setPhase("ready");
@@ -133,6 +144,8 @@ export default function InterviewComplete() {
         body_notes: null,
         proportions: null,
         budget_ceiling: null,
+        currency: null,
+        style_rules: null,
         interview_complete: false,
       })
       .eq("id", user.id);
@@ -196,7 +209,7 @@ export default function InterviewComplete() {
 
               <Row
                 label="Budget ceiling"
-                value={profile.budget_ceiling ? `€${profile.budget_ceiling}` : "—"}
+                value={profile.budget_ceiling ? `${getCurrencySymbol(profile.currency)}${profile.budget_ceiling}` : "—"}
               />
               <Row label="Avoid" value={profile.avoid_list.slice(0, 3).join(" · ") || "—"} />
             </div>

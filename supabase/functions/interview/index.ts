@@ -26,11 +26,16 @@ HARD RULES — DO NOT BREAK
 2. Draw at least one conclusion the client did NOT explicitly state. Connect two or more answers into a single insight.
 3. BANNED WORDS — do not use these or close variants under any circumstances: effortless, chic, elevate, elevated, timeless, timeless elegance, versatile, versatile pieces, seamless, seamlessly, fashion-forward, curated, elevated basics, wardrobe staples, statement piece, capsule, polished, sophisticated, on-trend, must-have.
 4. Specifics over abstractions. Name actual garments, cuts, fabrics, shoulder lines, hem lengths.
+5. PROPORTIONS FRAMING — every proportion is an asset to dress around, never a deficit to compensate for.
+   - If legs are notably longer than torso: legs are the standout feature. The avoid_list must NEVER mention shortening the torso, balancing the torso, or anything that frames leg length as a problem. Instead, avoid_list items must focus on what INTERRUPTS the leg line — e.g. "hemlines that cut the leg at mid-calf", "anything that breaks the silhouette at an unflattering point on the leg", "dropped-crotch cuts that lose the leg line entirely". The style_summary and body_notes must treat long legs as a feature to lean into, not manage.
+   - If torso is notably longer than legs: focus on cuts that define the waist and extend the visual line of the leg — never frame as "compensating for short legs".
+   - If broad shoulders: shoulders are a strong feature to dress around, not a width problem to hide.
+   - If narrower shoulders: note what adds structure and balance — never frame as a deficiency.
 
 EXAMPLES OF THE BAR
 
-Bad style_summary (literal, repeats her): "You like blazers and trousers, prefer neutral colours, and want to feel confident at work."
-Good style_summary: "Your instinct is always for structure — you reach for a blazer the way other women reach for a cardigan. The palette is restrained, but you are not afraid of one strong note. What you are building is a wardrobe with quiet authority."
+Bad style_summary (literal, repeats the client): "You like blazers and trousers, prefer neutral colours, and want to feel confident at work."
+Good style_summary: "Your instinct is always for structure — you reach for a blazer the way other people reach for a cardigan. The palette is restrained, but you are not afraid of one strong note. What you are building is a wardrobe with quiet authority."
 
 Bad archetypes: "professional", "casual", "modern".
 Good archetypes: "quiet authority", "off-duty creative", "European minimalist", "old money weekend", "downtown editor", "weekend in the country".
@@ -43,13 +48,13 @@ Good avoid_list: "anything that loses the shoulder line", "high-shine synthetics
 
 const TOOL = {
   name: "save_profile",
-  description: "Save the user's style profile. Address the user as 'you', never 'she'.",
+  description: "Save the user's style profile. Address the user as 'you', never 'she' or 'her'.",
   input_schema: {
     type: "object",
     properties: {
       style_summary: {
         type: "string",
-        description: "EXACTLY 2-3 sentences. A stylist's interpretation of who you are dressing as — not a recap of your answers. Must contain at least one insight you did not state outright. Second person ('you', 'your'). No banned words. Never quote the user back to herself.",
+        description: "EXACTLY 2-3 sentences. A stylist's interpretation of who you are dressing as — not a recap of your answers. Must contain at least one insight you did not state outright. Second person ('you', 'your'). No banned words. Never quote the user back to them.",
       },
       style_archetypes: {
         type: "array",
@@ -64,7 +69,7 @@ const TOOL = {
       avoid_list: {
         type: "array",
         items: { type: "string" },
-        description: "3-5 SPECIFIC things to avoid — name the actual problem, not a vague category. 'Anything that loses the shoulder line' not 'baggy clothes'. 'High-shine synthetics' not 'cheap fabrics'. No banned words.",
+        description: "3-5 SPECIFIC things to avoid — name the actual problem, not a vague category. 'Anything that loses the shoulder line' not 'baggy clothes'. 'High-shine synthetics' not 'cheap fabrics'. No banned words. CRITICAL: if the client has long legs, avoid_list must NEVER say 'shorten the torso', 'balance the torso', or any deficit framing around leg length. Focus instead on what breaks the leg line: e.g. 'hemlines that cut the leg at an unflattering point', 'dropped-crotch cuts that interrupt the leg line'.",
       },
       body_notes: {
         type: "string",
@@ -114,7 +119,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat the client's words back. Interpret.\n- Name at least one through-line the client did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- No banned words. Second person throughout.`;
+    const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat the client's words back. Interpret.\n- Name at least one through-line the client did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- PROPORTIONS: every proportion is an asset, never a deficit. If legs are notably longer than torso, the avoid_list must NEVER reference shortening the torso or compensating for leg length. Focus on what interrupts the leg line (e.g. "hemlines that cut the leg at mid-calf", "anything that breaks the silhouette at the wrong point on the leg"). The style_summary and body_notes must treat long legs as a feature to dress around, not a problem to solve.\n- No banned words. Second person throughout.`;
 
     const resp = await fetch(ANTHROPIC_URL, {
       method: "POST",

@@ -1,5 +1,6 @@
 // Question definitions for the interview flow.
-// Q1–Q4 are fixed/structured. Q5–Q11 are open-text or chip-based prompts.
+// Q0 is currency (fixed/choice). Q1–Q4 are fixed/structured. Q5–Q12 are open-text or chip-based.
+// TOTAL = 13
 
 export type ChoiceQuestion = {
   kind: "choice";
@@ -27,8 +28,30 @@ export type OpenQuestion = {
 
 export type Question = ChoiceQuestion | MultiPartQuestion | OpenQuestion;
 
+export const CURRENCY_OPTIONS = ["EUR — €", "GBP — £", "USD — $", "AED — AED"] as const;
+
+export function getCurrencySymbol(currencyAnswer: string | null | undefined): string {
+  if (!currencyAnswer) return "€";
+  if (currencyAnswer.includes("GBP")) return "£";
+  if (currencyAnswer.includes("USD")) return "$";
+  if (currencyAnswer.includes("AED")) return "AED ";
+  return "€";
+}
+
+export function getBudgetOptions(currencySymbol: string): string[] {
+  const s = currencySymbol;
+  return [`Under ${s}100`, `${s}100–300`, `${s}300–500`, `Over ${s}500`];
+}
+
 export const FIXED_QUESTIONS: Question[] = [
-  // Q1 — Fix 2: mutually exclusive lifestyle options
+  // Q0 — Currency detection
+  {
+    kind: "choice",
+    prompt: "Which currency do you shop in?",
+    options: [...CURRENCY_OPTIONS],
+    allowOther: false,
+  },
+  // Q1 — Lifestyle
   {
     kind: "choice",
     prompt: "What does your typical week look like?",
@@ -42,14 +65,14 @@ export const FIXED_QUESTIONS: Question[] = [
     ],
     allowOther: false,
   },
-  // Q2
+  // Q2 — Budget (options rendered dynamically in Interview.tsx based on Q0 currency)
   {
     kind: "choice",
     prompt: "What's your budget ceiling per piece?",
-    options: ["Under €100", "€100–300", "€300–500", "Over €500"],
+    options: getBudgetOptions("€"),
     allowOther: false,
   },
-  // Q3
+  // Q3 — Multi (body/fit)
   {
     kind: "multi",
     parts: [
@@ -76,7 +99,7 @@ export const FIXED_QUESTIONS: Question[] = [
       },
     ],
   },
-  // Q4 — Fix 3: feature-based proportions framing
+  // Q4 — Proportions (feature-based framing)
   {
     kind: "choice",
     prompt: "How would you describe your leg-to-torso ratio?",
@@ -99,7 +122,12 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
   { kind: "open", prompt: "Name one thing in your wardrobe you love and always reach for." },
   // Q7
   { kind: "open", prompt: "Name one thing in your wardrobe you never wear." },
-  // Q8 — Fix 4: style archetypes, up to 2, no Other
+  // Q8 — style_rules (saved verbatim, not synthesised by AI)
+  {
+    kind: "open",
+    prompt: "Are there cuts or styles you know don't work for you?",
+  },
+  // Q9 — Style archetypes, up to 2
   {
     kind: "open",
     prompt: "Which of these best describes your style?",
@@ -111,9 +139,9 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
       allowOther: false,
     },
   },
-  // Q9
+  // Q10
   { kind: "open", prompt: "Which designers or brands do you love, even if you can't always afford them?" },
-  // Q10 — Fix 5: shopping, up to 2
+  // Q11 — Shopping, up to 2
   {
     kind: "open",
     prompt: "Where do you shop most?",
@@ -133,7 +161,7 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
       allowOther: false,
     },
   },
-  // Q11 — up to 2
+  // Q12 — Feel like, up to 2
   {
     kind: "open",
     prompt: "What do you want to feel like when you're dressed?",
