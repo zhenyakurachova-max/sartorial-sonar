@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 type Look = {
   title: string;
+  item_ids: string[];
   pieces: string[];
   styling_note: string;
 };
@@ -16,6 +17,7 @@ export default function LooksStub() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [looks, setLooks] = useState<Look[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
 
   const fetchLooks = async () => {
     setPhase("loading");
@@ -27,7 +29,7 @@ export default function LooksStub() {
     if (error || data?.error) {
       const msg = data?.error ?? error?.message ?? "";
       const text = typeof msg === "string" ? msg : JSON.stringify(msg);
-      if (text.includes("3 kept")) {
+      if (text.includes("3 kept") || text.includes("least 3")) {
         setPhase("empty");
       } else {
         setErr(text || "Couldn't generate looks.");
@@ -35,9 +37,38 @@ export default function LooksStub() {
       }
       return;
     }
-    setLooks((data?.looks ?? []) as Look[]);
+    const newLooks = (data?.looks ?? []) as Look[];
+    setLooks(newLooks);
     setPhase("ready");
   };
+
+  // Load thumbnail images for item_ids returned by the API
+  useEffect(() => {
+    if (!looks.length) return;
+    const allIds = [...new Set(looks.flatMap((l) => l.item_ids ?? []))];
+    if (!allIds.length) return;
+    let cancelled = false;
+    (async () => {
+      const { data: rows } = await supabase
+        .from("wardrobe_items")
+        .select("id, image_path")
+        .in("id", allIds);
+      if (cancelled || !rows) return;
+      const pathMap: Record<string, string> = Object.fromEntries(rows.map((r: any) => [r.id, r.image_path]));
+      const next: Record<string, string> = {};
+      await Promise.all(
+        allIds.map(async (id) => {
+          const path = pathMap[id];
+          if (!path) return;
+          const { data: url } = await supabase.storage.from("wardrobe").createSignedUrl(path, 60 * 60);
+          if (url?.signedUrl) next[id] = url.signedUrl;
+        }),
+      );
+      if (cancelled) return;
+      setThumbUrls((u) => ({ ...u, ...next }));
+    })();
+    return () => { cancelled = true; };
+  }, [looks]);
 
   useEffect(() => {
     fetchLooks();
@@ -80,6 +111,24 @@ export default function LooksStub() {
             <div className="mt-8 space-y-5">
               {looks.map((look, i) => (
                 <article key={i} className="rounded-sm border border-border bg-muted/30 px-5 py-5">
+                  {/* Overlapping circular thumbnails */}
+                  {(look.item_ids?.length ?? 0) > 0 && (
+                    <div className="flex items-center mb-4" style={{ paddingLeft: "4px" }}>
+                      {(look.item_ids ?? []).slice(0, 4).map((id, j) => (
+                        <div
+                          key={id}
+                          className="h-10 w-10 rounded-full border-2 border-background overflow-hidden bg-muted shrink-0"
+                          style={{ marginLeft: j === 0 ? 0 : "-10px", zIndex: 4 - j, position: "relative" }}
+                        >
+                          {thumbUrls[id] ? (
+                            <img src={thumbUrls[id]} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="h-full w-full bg-muted" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <h2 className="font-serif text-xl leading-snug">{look.title}</h2>
                   <ul className="mt-3 space-y-1.5">
                     {look.pieces.map((piece, j) => (

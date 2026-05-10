@@ -1,5 +1,5 @@
 // Question definitions for the interview flow.
-// Q1–Q3 are fixed/structured. Q4–Q10 are open-text or chip-based prompts.
+// Q1–Q4 are fixed/structured. Q5–Q11 are open-text or chip-based prompts.
 
 export type ChoiceQuestion = {
   kind: "choice";
@@ -16,7 +16,6 @@ export type MultiPartQuestion = {
 export type OpenQuestion = {
   kind: "open";
   prompt: string;
-  // Optional chip-based input. If omitted, render a free-text box.
   chips?: {
     select: "single" | "multi";
     options: string[];
@@ -29,25 +28,28 @@ export type OpenQuestion = {
 export type Question = ChoiceQuestion | MultiPartQuestion | OpenQuestion;
 
 export const FIXED_QUESTIONS: Question[] = [
+  // Q1 — Fix 2: mutually exclusive lifestyle options
   {
     kind: "choice",
     prompt: "What does your typical week look like?",
     options: [
-      "I work in an office",
-      "I work from home",
-      "I'm mostly out and about — meetings, clients, errands",
-      "I wear a uniform at work",
-      "My week is a real mix",
-      "Mostly social and personal life",
+      "Most of my week is office or workplace",
+      "I mostly work from home",
+      "I'm out and about — meetings, clients, on the move",
+      "I wear a uniform for work",
+      "My week is mostly social and personal",
+      "It genuinely varies week to week",
     ],
     allowOther: false,
   },
+  // Q2
   {
     kind: "choice",
     prompt: "What's your budget ceiling per piece?",
     options: ["Under €100", "€100–300", "€300–500", "Over €500"],
     allowOther: false,
   },
+  // Q3
   {
     kind: "multi",
     parts: [
@@ -74,15 +76,16 @@ export const FIXED_QUESTIONS: Question[] = [
       },
     ],
   },
+  // Q4 — Fix 3: feature-based proportions framing
   {
     kind: "choice",
-    prompt: "How would you describe your proportions?",
+    prompt: "How would you describe your leg-to-torso ratio?",
     options: [
-      "Long legs, shorter torso",
-      "Long torso, shorter legs",
+      "My legs are notably longer than my torso",
+      "My torso is notably longer than my legs",
       "Pretty balanced overall",
-      "Broad shoulders, narrower hips",
-      "Narrower shoulders, wider hips",
+      "Broad shoulders relative to my hips",
+      "Narrower shoulders relative to my hips",
       "I honestly don't know",
     ],
     allowOther: false,
@@ -90,41 +93,34 @@ export const FIXED_QUESTIONS: Question[] = [
 ];
 
 export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
-  // Q4
-  { kind: "open", prompt: "What do you reach for when you want to look your best?" },
   // Q5
-  { kind: "open", prompt: "Name one thing in your wardrobe you love and always reach for." },
+  { kind: "open", prompt: "What do you reach for when you want to look your best?" },
   // Q6
+  { kind: "open", prompt: "Name one thing in your wardrobe you love and always reach for." },
+  // Q7
   { kind: "open", prompt: "Name one thing in your wardrobe you never wear." },
-  // Q7 — multi-select chips, up to 3, + Other
+  // Q8 — Fix 4: style archetypes, up to 2, no Other
   {
     kind: "open",
-    prompt: "How would you describe your personal style in three words?",
+    prompt: "Which of these best describes your style?",
     chips: {
       select: "multi",
-      maxSelect: 3,
-      helperText: "Pick up to 3",
-      options: [
-        "Classic",
-        "Minimal",
-        "Bold",
-        "Relaxed",
-        "Polished",
-        "Creative",
-        "Understated",
-        "Eclectic",
-      ],
-      allowOther: true,
+      maxSelect: 2,
+      helperText: "Pick up to 2",
+      options: ["Classic", "Minimal", "Elegant", "Romantic", "Edgy", "Relaxed", "Creative", "Not sure"],
+      allowOther: false,
     },
   },
-  // Q8
+  // Q9
   { kind: "open", prompt: "Which designers or brands do you love, even if you can't always afford them?" },
-  // Q9 — multi-select chips
+  // Q10 — Fix 5: shopping, up to 2
   {
     kind: "open",
     prompt: "Where do you shop most?",
     chips: {
       select: "multi",
+      maxSelect: 2,
+      helperText: "Pick up to 2",
       options: [
         "Independent boutiques",
         "Designer brands and stores",
@@ -137,7 +133,7 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
       allowOther: false,
     },
   },
-  // Q10 — multi-select chips, up to 2, + Other
+  // Q11 — up to 2
   {
     kind: "open",
     prompt: "What do you want to feel like when you're dressed?",

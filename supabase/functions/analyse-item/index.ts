@@ -1,6 +1,25 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+// Maps the client's stated proportions to a feature-based styling note.
+function proportionsNote(p: string): string {
+  if (!p) return "";
+  const low = p.toLowerCase();
+  if (low.includes("legs are notably longer"))
+    return "Legs are a standout proportional feature — celebrate leg length with higher hemlines, wide-leg cuts, and high-rise waistbands.";
+  if (low.includes("torso is notably longer"))
+    return "Torso is notably longer — use high-rise bottoms, cropped lengths, and waist-defining cuts to create balance.";
+  if (low.includes("balanced"))
+    return "Proportions are balanced — most silhouettes work well.";
+  if (low.includes("broad shoulder"))
+    return "Shoulders are a strong proportional feature — balance with wider-cut bottoms and avoid cap or puffed sleeves.";
+  if (low.includes("narrower shoulder"))
+    return "Shoulders are narrower than hips — structured shoulder seams, boat necks, and clean-cut tops add visual width.";
+  if (low.includes("don't know") || low.includes("honest"))
+    return "";
+  return `Proportions: ${p}`;
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -44,20 +63,25 @@ Deno.serve(async (req: Request) => {
     const mediaType = (imageData.type && imageData.type.startsWith("image/")) ? imageData.type : "image/jpeg";
     console.log("Image encoded, size:", base64.length, "type:", mediaType);
 
+    // Reject images over 5 MB before sending to Claude
+    const estimatedRawBytes = Math.floor(base64.length * 0.75);
+    if (estimatedRawBytes > 5 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: "IMAGE_TOO_LARGE" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) { console.error("No ANTHROPIC_API_KEY"); return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: corsHeaders }); }
 
-    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}. Body proportions: ${profile?.proportions || "not specified"}. Body notes: ${profile?.body_notes || "none"}.
-
-Take her proportions into account when judging fit, hem length, rise, and silhouette.
+    const propNote = proportionsNote(profile?.proportions || "");
+    const systemPrompt = `You are a personal stylist with strong opinions. Style profile: ${profile?.style_summary || "classic and polished"}. Palette: ${(profile?.colour_palette || []).join(", ")}. Archetypes: ${(profile?.style_archetypes || []).join(", ")}. Avoid: ${(profile?.avoid_list || []).join(", ")}. Body notes: ${profile?.body_notes || "none"}.${propNote ? ` ${propNote}` : ""}
 
 Assess the clothing item in the photo. Return ONLY valid JSON, no markdown, no explanation:
 { "verdict": "keep", "reason": "one sentence max 20 words", "tags": ["tag1", "tag2"] }
 
 verdict must be exactly one of: keep, dump, gap
-- keep: fits her profile and is good quality
-- dump: wrong for her style or poor quality
-- gap: good item but she needs more like this`;
+- keep: fits the client's profile and is good quality
+- dump: wrong for the client's style or poor quality
+- gap: good item but the client needs more like this`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -78,7 +102,6 @@ verdict must be exactly one of: keep, dump, gap
     const text = anthropicData.content?.[0]?.text;
     if (!text) return new Response(JSON.stringify({ error: "No text in response" }), { status: 500, headers: corsHeaders });
 
-    // Strip markdown fences if model wraps JSON
     const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
     const result = JSON.parse(cleaned);
     console.log("Result:", result);

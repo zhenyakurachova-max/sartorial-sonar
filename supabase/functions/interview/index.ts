@@ -11,10 +11,10 @@ const MODEL = "claude-sonnet-4-6";
 
 type Answer = { question_index: number; question: string; answer: string };
 
-const SYSTEM_SYNTH = `You are an experienced personal stylist who has just finished a 10-question intake interview with a client. You are now writing up your professional read of her — for her to read.
+const SYSTEM_SYNTH = `You are an experienced personal stylist who has just finished a 10-question intake interview with a client. You are now writing up your professional read of the client — for them to read.
 
 YOUR JOB IS TO INTERPRET, NOT TO SUMMARISE.
-A junior assistant could repeat her answers back. You are the senior stylist. You connect dots, name the through-line, and tell her something about herself she did not quite say out loud but will recognise immediately as true.
+A junior assistant could repeat the client's answers back. You are the senior stylist. You connect dots, name the through-line, and tell them something they did not quite say out loud but will recognise immediately as true.
 
 VOICE
 - Second person throughout: "you", "your", "yours". Never "she" / "her".
@@ -22,8 +22,8 @@ VOICE
 - Sound like a sharp, warm professional who has done this a thousand times — not like a fashion magazine, not like a chatbot, not like a brochure.
 
 HARD RULES — DO NOT BREAK
-1. NEVER quote or paraphrase her answers back at her. If she said "I wear blazers to meetings", do NOT write "you wear blazers to meetings". Instead, name the instinct underneath it ("your default move is structure").
-2. Draw at least one conclusion she did NOT explicitly state. Connect two or more answers into a single insight.
+1. NEVER quote or paraphrase the client's answers back to the client. If they said "I wear blazers to meetings", do NOT write "you wear blazers to meetings". Instead, name the instinct underneath it ("your default move is structure").
+2. Draw at least one conclusion the client did NOT explicitly state. Connect two or more answers into a single insight.
 3. BANNED WORDS — do not use these or close variants under any circumstances: effortless, chic, elevate, elevated, timeless, timeless elegance, versatile, versatile pieces, seamless, seamlessly, fashion-forward, curated, elevated basics, wardrobe staples, statement piece, capsule, polished, sophisticated, on-trend, must-have.
 4. Specifics over abstractions. Name actual garments, cuts, fabrics, shoulder lines, hem lengths.
 
@@ -72,7 +72,7 @@ const TOOL = {
       },
       proportions: {
         type: "string",
-        description: "Verbatim her stated proportions answer (e.g. 'Long legs, shorter torso'). Empty string if she said she doesn't know.",
+        description: "Verbatim the client's stated proportions answer (e.g. 'My legs are notably longer than my torso'). Empty string if they said they don't know.",
       },
       budget_ceiling: {
         type: "integer",
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat her words back. Interpret.\n- Name at least one through-line she did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- No banned words. Second person throughout.`;
+    const userMsg = `Here is the full intake interview:\n\n${transcript(history as Answer[])}\n\nNow write up your professional read by calling the save_profile tool.\n\nReminders before you write:\n- Do NOT repeat the client's words back. Interpret.\n- Name at least one through-line the client did not state outright.\n- Archetypes must be specific and evocative (e.g. "quiet authority"), not generic.\n- Maximum 4 colours, with precise names ("ink navy", not "navy").\n- Avoid_list must name the actual problem ("anything that loses the shoulder line"), not a vague category.\n- No banned words. Second person throughout.`;
 
     const resp = await fetch(ANTHROPIC_URL, {
       method: "POST",

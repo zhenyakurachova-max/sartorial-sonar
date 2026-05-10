@@ -15,6 +15,7 @@ type Item = {
   id: string;
   image_path: string;
   category: string;
+  brand: string | null;
   status: Status;
   verdict: Verdict | null;
   reason: string | null;
@@ -26,6 +27,7 @@ type AnalysisResult = {
   id?: string;
   image_path?: string;
   category?: string;
+  brand?: string | null;
   status?: Status;
   created_at?: string;
   item?: Item | null;
@@ -39,7 +41,8 @@ const CATEGORIES = ["Top", "Bottom", "Dress", "Outerwear", "Shoes", "Bag", "Acce
 type Category = (typeof CATEGORIES)[number];
 
 const ANALYSIS_TIMEOUT_MS = 30_000;
-const FILE_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB
+const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
+const ITEM_SELECT = "id, image_path, category, brand, status, verdict, reason, tags, created_at";
 
 const isVerdict = (value: unknown): value is Verdict =>
   value === "keep" || value === "dump" || value === "gap";
@@ -61,42 +64,57 @@ export default function WardrobeStub() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  // Single-file pending state
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string | null>(null);
   const [pendingCategory, setPendingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fileTooLarge, setFileTooLarge] = useState(false);
 
-  // Batch upload state
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchPreviews, setBatchPreviews] = useState<string[]>([]);
   const [batchCategories, setBatchCategories] = useState<(Category | null)[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
-  // Stale pending items
   const [staleIds, setStaleIds] = useState<Set<string>>(new Set());
+  const [itemMessages, setItemMessages] = useState<Record<string, string>>({});
   const pendingSince = useRef<Record<string, number>>({});
 
-  // Load items
+  // Load items + one-time stuck-item cleanup
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
         .from("wardrobe_items")
-        .select("id, image_path, category, status, verdict, reason, tags, created_at")
+        .select(ITEM_SELECT)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       if (cancelled) return;
       if (error) console.error("[wardrobe] load", error);
-      setItems((data ?? []) as Item[]);
+
+      const allItems = (data ?? []) as Item[];
+
+      // Mark items stuck in pending for >1 hour as failed
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const stuckIds = allItems
+        .filter((it) => it.status === "pending" && it.created_at < oneHourAgo)
+        .map((it) => it.id);
+
+      if (stuckIds.length > 0) {
+        await supabase.from("wardrobe_items").update({ status: "failed" }).in("id", stuckIds);
+      }
+
+      const processed = allItems.map((it) =>
+        stuckIds.includes(it.id) ? { ...it, status: "failed" as Status } : it,
+      );
+
+      setItems(processed);
       setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [user]);
 
-  // Sign URLs for thumbnails whenever items change
+  // Sign URLs for thumbnails
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -147,10 +165,7 @@ export default function WardrobeStub() {
 
   const onFileChosen = (file: File | null) => {
     if (!file) return;
-    if (file.size > FILE_SIZE_LIMIT) {
-      setFileTooLarge(true);
-      return;
-    }
+    if (file.size > FILE_SIZE_LIMIT) { setFileTooLarge(true); return; }
     setFileTooLarge(false);
     setPendingFile(file);
     setPendingPreview(URL.createObjectURL(file));
@@ -173,9 +188,7 @@ export default function WardrobeStub() {
   };
 
   const runAnalysis = async (itemId: string) => {
-    setItems((prev) =>
-      prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)),
-    );
+    setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)));
     setDetailItem((current) => (current?.id === itemId ? { ...current, status: "pending" } : current));
 
     let data: AnalysisResult | null = null;
@@ -214,9 +227,7 @@ export default function WardrobeStub() {
         } else {
           errMessage = error.message ?? String(error);
         }
-      } catch {
-        errMessage = error.message ?? String(error);
-      }
+      } catch { errMessage = error.message ?? String(error); }
     } else if (data?.error) {
       errMessage = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
     } else if (data?.item && data.item.status === "analysed" && isVerdict(data.item.verdict)) {
@@ -227,10 +238,7 @@ export default function WardrobeStub() {
       return;
     } else if (!isVerdict(data?.verdict)) {
       const { data: refreshed } = await supabase
-        .from("wardrobe_items")
-        .select("id, image_path, category, status, verdict, reason, tags, created_at")
-        .eq("id", itemId)
-        .single();
+        .from("wardrobe_items").select(ITEM_SELECT).eq("id", itemId).single();
       if (refreshed && refreshed.status === "analysed" && isVerdict(refreshed.verdict)) {
         applyAnalysedItem(refreshed as Item);
         return;
@@ -239,9 +247,15 @@ export default function WardrobeStub() {
     }
 
     if (errMessage) {
+      const displayMsg = errMessage.includes("IMAGE_TOO_LARGE")
+        ? "Photo too large to analyse. Please re-upload a smaller version."
+        : errMessage;
       setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "failed" } : it)));
       setDetailItem((current) => (current?.id === itemId ? { ...current, status: "failed" } : current));
-      toast({ title: "Couldn't analyse that photo", description: errMessage });
+      setItemMessages((prev) => ({ ...prev, [itemId]: displayMsg }));
+      if (!errMessage.includes("IMAGE_TOO_LARGE")) {
+        toast({ title: "Couldn't analyse that photo", description: displayMsg });
+      }
       return;
     }
 
@@ -255,6 +269,7 @@ export default function WardrobeStub() {
   };
 
   const onRetry = async (itemId: string) => {
+    setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, status: "pending" } : it)));
     await supabase.from("wardrobe_items").update({ status: "pending" }).eq("id", itemId);
     runAnalysis(itemId);
   };
@@ -266,25 +281,28 @@ export default function WardrobeStub() {
     setDetailItem(null);
   };
 
+  const onBrandChange = async (itemId: string, brand: string) => {
+    const trimmed = brand.trim() || null;
+    await supabase.from("wardrobe_items").update({ brand: trimmed }).eq("id", itemId);
+    setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, brand: trimmed } : it)));
+    setDetailItem((current) => (current?.id === itemId ? { ...current, brand: trimmed } : current));
+  };
+
   const uploadFile = async (file: File, category: Category): Promise<Item> => {
     const mimeType = file.type || "image/jpeg";
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
     const path = `${user!.id}/${crypto.randomUUID()}.${ext}`;
-
-    // Read as ArrayBuffer for iOS Safari compatibility
     const buffer = await file.arrayBuffer();
     const { error: upErr } = await supabase.storage
       .from("wardrobe")
       .upload(path, buffer, { contentType: mimeType });
     if (upErr) throw new Error(upErr.message || "Upload failed");
-
     const { data: inserted, error: insErr } = await supabase
       .from("wardrobe_items")
       .insert({ user_id: user!.id, image_path: path, category, status: "pending" })
-      .select("id, image_path, category, status, verdict, reason, tags, created_at")
+      .select(ITEM_SELECT)
       .single();
     if (insErr) throw new Error(insErr.message || "Failed to save item");
-
     return inserted as Item;
   };
 
@@ -309,10 +327,8 @@ export default function WardrobeStub() {
     if (!user || batchFiles.length === 0 || batchCategories.some((c) => !c)) return;
     setSubmitting(true);
     setBatchProgress({ done: 0, total: batchFiles.length });
-
     const newItems: Item[] = [];
     let failed = 0;
-
     for (let i = 0; i < batchFiles.length; i++) {
       try {
         const newItem = await uploadFile(batchFiles[i], batchCategories[i]!);
@@ -324,19 +340,11 @@ export default function WardrobeStub() {
       }
       setBatchProgress({ done: i + 1, total: batchFiles.length });
     }
-
     resetAddSheet();
-
     if (failed > 0) {
-      toast({
-        title: "Some uploads failed",
-        description: `${newItems.length} of ${batchFiles.length} items uploaded.`,
-      });
+      toast({ title: "Some uploads failed", description: `${newItems.length} of ${batchFiles.length} items uploaded.` });
     }
-
-    for (const item of newItems) {
-      runAnalysis(item.id);
-    }
+    for (const item of newItems) runAnalysis(item.id);
   };
 
   const hasItems = items.length > 0;
@@ -374,6 +382,7 @@ export default function WardrobeStub() {
                 onRetry={() => onRetry(it.id)}
                 onRemove={() => onDelete(it.id)}
                 isStale={staleIds.has(it.id)}
+                failMessage={itemMessages[it.id]}
               />
             ))}
           </div>
@@ -390,31 +399,15 @@ export default function WardrobeStub() {
         <button
           onClick={() => setAddOpen(true)}
           aria-label="Add item"
-          title="Add item"
           className="fixed bottom-20 right-5 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg"
         >
           <Plus className="h-6 w-6" />
         </button>
       )}
 
-      {/* Hidden file inputs */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          onFileChosen(e.target.files?.[0] ?? null);
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={(e) => { onFileChosen(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+      <input ref={galleryInputRef} type="file" accept="image/*" multiple className="hidden"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = "";
@@ -428,40 +421,31 @@ export default function WardrobeStub() {
             setBatchCategories(new Array(files.length).fill(null));
             setAddOpen(true);
           }
-        }}
-      />
+        }} />
 
-      {/* Add item bottom sheet */}
+      {/* Add item sheet */}
       <Sheet open={addOpen} onOpenChange={(o) => (o ? setAddOpen(true) : resetAddSheet())}>
         <SheetContent side="bottom" className="rounded-t-xl bg-background border-border p-6 max-h-[92vh] overflow-y-auto">
           <SheetHeader className="text-left">
             <SheetTitle className="font-serif text-2xl font-normal">
               {batchFiles.length > 0
                 ? `Categorise ${batchFiles.length} items`
-                : pendingPreview
-                  ? "Categorise this piece"
-                  : "Add an item"}
+                : pendingPreview ? "Categorise this piece" : "Add an item"}
             </SheetTitle>
           </SheetHeader>
 
           {fileTooLarge ? (
             <div className="mt-6 space-y-4">
-              <p className="text-sm text-destructive">
-                This photo is too large (over 50 MB). Please use a smaller image.
-              </p>
-              <Button variant="outline" onClick={resetAddSheet} className="rounded-sm h-12 w-full">
-                Dismiss
-              </Button>
+              <p className="text-sm text-destructive">This photo is too large (over 50 MB). Please use a smaller image.</p>
+              <Button variant="outline" onClick={resetAddSheet} className="rounded-sm h-12 w-full">Dismiss</Button>
             </div>
           ) : batchFiles.length > 0 ? (
             <div className="mt-6">
               {batchProgress ? (
                 <div className="space-y-3">
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }}
-                    />
+                    <div className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }} />
                   </div>
                   <p className="text-sm text-center text-muted-foreground">
                     {batchProgress.done} of {batchProgress.total} uploaded
@@ -469,56 +453,34 @@ export default function WardrobeStub() {
                 </div>
               ) : (
                 <>
-                  {/* Per-item list */}
                   <div className="space-y-6 max-h-[55vh] overflow-y-auto pr-1 pb-2">
                     {batchFiles.map((_, i) => (
                       <div key={i}>
                         <div className="aspect-square w-full overflow-hidden rounded-sm bg-muted">
                           {batchPreviews[i] && (
-                            <img
-                              src={batchPreviews[i]}
-                              alt={`Photo ${i + 1}`}
-                              className="h-full w-full object-cover"
-                            />
+                            <img src={batchPreviews[i]} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" />
                           )}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {CATEGORIES.map((c) => {
                             const selected = batchCategories[i] === c;
                             return (
-                              <button
-                                key={c}
-                                type="button"
-                                onClick={() =>
-                                  setBatchCategories((prev) =>
-                                    prev.map((cat, idx) => (idx === i ? c : cat)),
-                                  )
-                                }
-                                className={cn(
-                                  "px-3 py-1.5 rounded-full text-xs border transition",
-                                  selected
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-background text-foreground border-border hover:border-primary/40",
-                                )}
-                              >
-                                {c}
-                              </button>
+                              <button key={c} type="button"
+                                onClick={() => setBatchCategories((prev) => prev.map((cat, idx) => (idx === i ? c : cat)))}
+                                className={cn("px-3 py-1.5 rounded-full text-xs border transition",
+                                  selected ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:border-primary/40")}
+                              >{c}</button>
                             );
                           })}
                         </div>
                       </div>
                     ))}
                   </div>
-                  {/* Footer */}
                   <div className="mt-4">
                     <p className="text-xs text-center text-muted-foreground mb-3">
                       {batchCategories.filter(Boolean).length} of {batchFiles.length} categorised
                     </p>
-                    <Button
-                      onClick={onBatchUpload}
-                      disabled={batchCategories.some((c) => !c)}
-                      className="rounded-sm h-12 w-full"
-                    >
+                    <Button onClick={onBatchUpload} disabled={batchCategories.some((c) => !c)} className="rounded-sm h-12 w-full">
                       Analyse all {batchFiles.length} items
                     </Button>
                   </div>
@@ -527,58 +489,38 @@ export default function WardrobeStub() {
             </div>
           ) : !pendingPreview ? (
             <div className="mt-6 space-y-3">
-              <button
-                onClick={() => onPick("camera")}
-                className="w-full flex items-center gap-3 px-4 py-4 border border-border rounded-sm text-left hover:bg-muted transition"
-              >
-                <Camera className="h-5 w-5 text-primary" />
-                <span>Take a photo</span>
+              <button onClick={() => onPick("camera")}
+                className="w-full flex items-center gap-3 px-4 py-4 border border-border rounded-sm text-left hover:bg-muted transition">
+                <Camera className="h-5 w-5 text-primary" /><span>Take a photo</span>
               </button>
-              <button
-                onClick={() => onPick("gallery")}
-                className="w-full flex items-center gap-3 px-4 py-4 border border-border rounded-sm text-left hover:bg-muted transition"
-              >
-                <ImageIcon className="h-5 w-5 text-primary" />
-                <span>Choose from gallery</span>
+              <button onClick={() => onPick("gallery")}
+                className="w-full flex items-center gap-3 px-4 py-4 border border-border rounded-sm text-left hover:bg-muted transition">
+                <ImageIcon className="h-5 w-5 text-primary" /><span>Choose from gallery</span>
               </button>
+              <p className="text-xs text-muted-foreground text-center pt-1">
+                For best results, keep photos under 5 MB.
+              </p>
             </div>
           ) : (
             <div className="mt-6 space-y-6">
               <div className="aspect-square w-full overflow-hidden rounded-sm bg-muted">
                 <img src={pendingPreview} alt="" className="h-full w-full object-cover" />
               </div>
-
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
-                  What is it?
-                </p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">What is it?</p>
                 <div className="flex flex-wrap gap-2">
                   {CATEGORIES.map((c) => {
                     const selected = pendingCategory === c;
                     return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setPendingCategory(c)}
-                        className={cn(
-                          "px-4 py-2 rounded-full text-sm border transition",
-                          selected
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background text-foreground border-border hover:border-primary/40",
-                        )}
-                      >
-                        {c}
-                      </button>
+                      <button key={c} type="button" onClick={() => setPendingCategory(c)}
+                        className={cn("px-4 py-2 rounded-full text-sm border transition",
+                          selected ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:border-primary/40")}
+                      >{c}</button>
                     );
                   })}
                 </div>
               </div>
-
-              <Button
-                onClick={onAnalyse}
-                disabled={!pendingCategory || submitting}
-                className="rounded-sm h-12 w-full"
-              >
+              <Button onClick={onAnalyse} disabled={!pendingCategory || submitting} className="rounded-sm h-12 w-full">
                 {submitting ? "Uploading…" : "Analyse this item"}
               </Button>
             </div>
@@ -588,10 +530,7 @@ export default function WardrobeStub() {
 
       {/* Item detail drawer */}
       <Sheet open={!!detailItem} onOpenChange={(o) => !o && setDetailItem(null)}>
-        <SheetContent
-          side="bottom"
-          className="rounded-t-xl bg-background border-border p-0 max-h-[92vh] overflow-y-auto"
-        >
+        <SheetContent side="bottom" className="rounded-t-xl bg-background border-border p-0 max-h-[92vh] overflow-y-auto">
           {detailItem && (
             <ItemDetail
               item={detailItem}
@@ -599,6 +538,8 @@ export default function WardrobeStub() {
               onClose={() => setDetailItem(null)}
               onRetry={() => { onRetry(detailItem.id); setDetailItem(null); }}
               onDelete={() => onDelete(detailItem.id)}
+              onBrandChange={(brand) => onBrandChange(detailItem.id, brand)}
+              failMessage={itemMessages[detailItem.id]}
             />
           )}
         </SheetContent>
@@ -607,19 +548,14 @@ export default function WardrobeStub() {
   );
 }
 
-function ItemTile({
-  item, src, onClick, onRetry, onRemove, isStale,
-}: {
-  item: Item; src?: string; onClick: () => void; onRetry: () => void; onRemove: () => void; isStale: boolean;
+function ItemTile({ item, src, onClick, onRetry, onRemove, isStale, failMessage }: {
+  item: Item; src?: string; onClick: () => void; onRetry: () => void; onRemove: () => void; isStale: boolean; failMessage?: string;
 }) {
+  const isTooLarge = failMessage?.includes("too large");
   const showRemove = item.status === "failed" || (item.status === "pending" && isStale);
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-muted group">
-      <button
-        onClick={onClick}
-        className="absolute inset-0 w-full h-full"
-        aria-label={`View ${item.category}`}
-      >
+      <button onClick={onClick} className="absolute inset-0 w-full h-full" aria-label={`View ${item.category}`}>
         {src ? (
           <img src={src} alt={item.category} className="h-full w-full object-cover transition group-active:scale-[0.98]" />
         ) : (
@@ -637,19 +573,21 @@ function ItemTile({
         </div>
       )}
       {item.status === "failed" && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onRetry(); }}
-          className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-verdict-gap text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90"
-        >
-          Retry
-        </button>
+        isTooLarge ? (
+          <button onClick={onClick}
+            className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-destructive/80 text-primary-foreground text-[10px] uppercase tracking-wider font-medium">
+            Too large
+          </button>
+        ) : (
+          <button onClick={(e) => { e.stopPropagation(); onRetry(); }}
+            className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-verdict-gap text-foreground text-[11px] uppercase tracking-wider font-medium hover:opacity-90">
+            Retry
+          </button>
+        )
       )}
       {showRemove && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          aria-label="Remove item"
-          className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/90 flex items-center justify-center shadow-sm"
-        >
+        <button onClick={(e) => { e.stopPropagation(); onRemove(); }} aria-label="Remove item"
+          className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/90 flex items-center justify-center shadow-sm">
           <X className="h-3 w-3" />
         </button>
       )}
@@ -659,73 +597,72 @@ function ItemTile({
 
 function VerdictPill({ verdict, large = false }: { verdict: Verdict; large?: boolean }) {
   const label = verdict === "keep" ? "Keep" : verdict === "dump" ? "Dump" : "Gap";
-  const styles =
-    verdict === "keep"
-      ? "bg-verdict-keep text-primary-foreground"
-      : verdict === "dump"
-        ? "bg-verdict-dump text-primary-foreground"
-        : "bg-verdict-gap text-foreground";
+  const styles = verdict === "keep" ? "bg-verdict-keep text-primary-foreground"
+    : verdict === "dump" ? "bg-verdict-dump text-primary-foreground"
+    : "bg-verdict-gap text-foreground";
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full font-medium uppercase tracking-wider",
-        large ? "px-3 py-1 text-xs" : "px-2 py-1 text-[11px]",
-        styles,
-      )}
-    >
+    <span className={cn("inline-flex items-center rounded-full font-medium uppercase tracking-wider",
+      large ? "px-3 py-1 text-xs" : "px-2 py-1 text-[11px]", styles)}>
       {label}
     </span>
   );
 }
 
-function ItemDetail({
-  item, src, onClose, onRetry, onDelete,
-}: {
+function ItemDetail({ item, src, onClose, onRetry, onDelete, onBrandChange, failMessage }: {
   item: Item; src?: string; onClose: () => void; onRetry: () => void; onDelete: () => void;
+  onBrandChange: (brand: string) => void; failMessage?: string;
 }) {
   const [styleOpen, setStyleOpen] = useState(false);
   return (
     <div>
-      <div className="relative">
-        <div className="aspect-square w-full bg-muted overflow-hidden">
-          {src ? <img src={src} alt={item.category} className="h-full w-full object-cover" /> : null}
-        </div>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-3 right-3 h-9 w-9 rounded-full bg-background/90 flex items-center justify-center shadow-sm"
-        >
+      {/* Photo — max 60vh, not full-screen */}
+      <div className="relative w-full bg-muted overflow-hidden" style={{ height: "60vh" }}>
+        {src ? <img src={src} alt={item.category} className="h-full w-full object-cover" /> : null}
+        <button onClick={onClose} aria-label="Close"
+          className="absolute top-3 right-3 h-9 w-9 rounded-full bg-background/90 flex items-center justify-center shadow-sm">
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="px-6 py-6 space-y-4">
+      <div className="px-6 py-5 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">{item.category}</p>
-          {item.status === "analysed" && item.verdict && (
-            <VerdictPill verdict={item.verdict} large />
-          )}
+          {item.status === "analysed" && item.verdict && <VerdictPill verdict={item.verdict} large />}
           {item.status === "pending" && (
             <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" /> Analysing…
             </span>
           )}
-          {item.status === "failed" && (
-            <button
-              onClick={onRetry}
-              className="px-3 py-1 rounded-full bg-verdict-gap text-foreground text-xs uppercase tracking-wider font-medium"
-            >
+          {item.status === "failed" && !failMessage?.includes("too large") && (
+            <button onClick={onRetry}
+              className="px-3 py-1 rounded-full bg-verdict-gap text-foreground text-xs uppercase tracking-wider font-medium">
               Retry
             </button>
           )}
         </div>
+
+        {/* Brand field */}
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Brand</p>
+          <input
+            type="text"
+            defaultValue={item.brand ?? ""}
+            placeholder="e.g. Ralph Lauren"
+            onBlur={(e) => onBrandChange(e.target.value)}
+            className="w-full text-sm bg-transparent border-b border-border/50 pb-1 outline-none focus:border-foreground/40 transition-colors placeholder:text-muted-foreground/50"
+          />
+        </div>
+
+        {failMessage && (
+          <p className="text-sm text-destructive text-pretty">{failMessage}</p>
+        )}
 
         {item.reason && (
           <p className="font-serif text-lg italic leading-snug text-pretty">{item.reason}</p>
         )}
 
         {item.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             {item.tags.map((t) => (
               <span key={t} className="px-2.5 py-1 text-xs rounded-full bg-muted text-muted-foreground">{t}</span>
             ))}
@@ -733,16 +670,13 @@ function ItemDetail({
         )}
 
         {item.status === "analysed" && (
-          <Button onClick={() => setStyleOpen(true)} className="mt-4 rounded-sm h-12 w-full">
+          <Button onClick={() => setStyleOpen(true)} className="mt-2 rounded-sm h-12 w-full">
             Style this
           </Button>
         )}
 
-        <Button
-          variant="ghost"
-          onClick={onDelete}
-          className="w-full rounded-sm text-destructive hover:text-destructive hover:bg-destructive/10"
-        >
+        <Button variant="ghost" onClick={onDelete}
+          className="w-full rounded-sm text-destructive hover:text-destructive hover:bg-destructive/10">
           Remove item
         </Button>
       </div>
@@ -750,16 +684,10 @@ function ItemDetail({
       <Sheet open={styleOpen} onOpenChange={setStyleOpen}>
         <SheetContent side="bottom" className="rounded-t-xl bg-background border-border p-8 max-h-[60vh]">
           <SheetHeader className="text-left">
-            <SheetTitle className="font-serif text-2xl font-normal">
-              Outfit suggestions coming soon.
-            </SheetTitle>
+            <SheetTitle className="font-serif text-2xl font-normal">Outfit suggestions coming soon.</SheetTitle>
           </SheetHeader>
-          <p className="mt-4 text-muted-foreground">
-            We'll style this piece with the rest of your wardrobe in a moment.
-          </p>
-          <Button onClick={() => setStyleOpen(false)} variant="ghost" className="mt-6 w-full">
-            Close
-          </Button>
+          <p className="mt-4 text-muted-foreground">We'll style this piece with the rest of your wardrobe in a moment.</p>
+          <Button onClick={() => setStyleOpen(false)} variant="ghost" className="mt-6 w-full">Close</Button>
         </SheetContent>
       </Sheet>
     </div>

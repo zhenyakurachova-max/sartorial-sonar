@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, Search, ShoppingBag, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Loader2, Search, ShoppingBag, Sparkles, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandMark } from "@/components/BrandMark";
@@ -24,6 +24,7 @@ type Gap = {
 
 export default function WardrobeKeepTab() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<KeepItem[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [gaps, setGaps] = useState<Gap[]>([]);
@@ -142,6 +143,13 @@ export default function WardrobeKeepTab() {
                         Keep
                       </span>
                     </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate("/app/looks", { state: { anchor: it.id } }); }}
+                      aria-label="Style this"
+                      className="absolute bottom-2 right-2 inline-flex items-center rounded-full bg-primary text-primary-foreground px-2 py-1 gap-1 text-[11px] font-medium"
+                    >
+                      <Sparkles className="h-2.5 w-2.5" /> Style
+                    </button>
                   </button>
                 ))}
               </div>

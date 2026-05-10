@@ -6,9 +6,27 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function proportionsNote(p: string): string {
+  if (!p) return "";
+  const low = p.toLowerCase();
+  if (low.includes("legs are notably longer"))
+    return "Legs are a standout proportional feature — celebrate leg length with higher hemlines, wide-leg cuts, and high-rise waistbands.";
+  if (low.includes("torso is notably longer"))
+    return "Torso is notably longer — use high-rise bottoms, cropped lengths, and waist-defining cuts to balance.";
+  if (low.includes("balanced"))
+    return "Proportions are balanced — most silhouettes work well.";
+  if (low.includes("broad shoulder"))
+    return "Shoulders are a strong proportional feature — balance with wider-cut bottoms and avoid cap sleeves.";
+  if (low.includes("narrower shoulder"))
+    return "Shoulders are narrower than hips — structured shoulder seams, boat necks, and clean-cut tops add visual balance.";
+  if (low.includes("don't know") || low.includes("honest"))
+    return "";
+  return `Proportions: ${p}`;
+}
+
 const TOOL = {
   name: "save_gaps",
-  description: "Identify the 3-5 most important gaps in this woman's wardrobe.",
+  description: "Identify the 3-5 most important gaps in this wardrobe.",
   input_schema: {
     type: "object",
     properties: {
@@ -19,7 +37,7 @@ const TOOL = {
           type: "object",
           properties: {
             title: { type: "string", description: "Short concrete name for the gap, e.g. 'A proper navy blazer'." },
-            description: { type: "string", description: "One sentence, max 25 words. Tell her why she needs it given her wardrobe and style." },
+            description: { type: "string", description: "One sentence, max 25 words. Tell the client why they need it given their wardrobe and style." },
             priority: { type: "string", enum: ["high", "medium", "low"] },
           },
           required: ["title", "description", "priority"],
@@ -61,6 +79,8 @@ Deno.serve(async (req: Request) => {
       `- ${it.category} (${it.verdict}) — tags: ${(it.tags || []).join(", ") || "none"}${it.reason ? ` — ${it.reason}` : ""}`
     ).join("\n");
 
+    const propNote = proportionsNote(profile?.proportions || "");
+
     const systemPrompt = `You are a senior personal stylist. Identify the 3-5 most important gaps in this client's wardrobe. Be specific, not generic — name actual garments.
 
 CLIENT PROFILE
@@ -69,14 +89,12 @@ Archetypes: ${(profile?.style_archetypes || []).join(", ") || "—"}
 Palette: ${(profile?.colour_palette || []).join(", ") || "—"}
 Avoid: ${(profile?.avoid_list || []).join(", ") || "—"}
 Body notes: ${profile?.body_notes || "—"}
-Proportions: ${profile?.proportions || "—"}
+${propNote ? `Proportions insight: ${propNote}` : ""}
 Budget per piece: €${profile?.budget_ceiling || "—"}
-
-Take her proportions into account when recommending cuts and silhouettes.
 
 Banned words: effortless, chic, elevate, elevated, timeless, versatile, seamless, fashion-forward, curated, polished, sophisticated, must-have, statement piece, capsule.`;
 
-    const userMsg = `Her current wardrobe (analysed):\n\n${inventory}\n\nReturn the top gaps via the save_gaps tool. Priority high = she needs it now, medium = next, low = nice to have.`;
+    const userMsg = `Client's current wardrobe (analysed):\n\n${inventory}\n\nReturn the top gaps via the save_gaps tool. Priority high = client needs it now, medium = next season, low = nice to have.`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

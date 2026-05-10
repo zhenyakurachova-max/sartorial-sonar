@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { RequireAuth } from "@/components/RequireAuth";
 import { BottomNav } from "@/components/BottomNav";
+import { FeedbackButton } from "@/components/FeedbackButton";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Signup from "./pages/Signup.tsx";
@@ -24,6 +25,7 @@ const Authed = ({ children }: { children: ReactNode }) => (
   <RequireAuth>
     {children}
     <BottomNav />
+    <FeedbackButton />
   </RequireAuth>
 );
 

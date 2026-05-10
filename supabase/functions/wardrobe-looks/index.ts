@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const TOOL = {
   name: "save_looks",
-  description: "Suggest 2-3 outfit combinations using only items from the provided kept wardrobe.",
+  description: "Suggest 2-3 outfit combinations using only items from the provided wardrobe.",
   input_schema: {
     type: "object",
     properties: {
@@ -19,10 +19,15 @@ const TOOL = {
           type: "object",
           properties: {
             title: { type: "string", description: "Short evocative name for the look, e.g. 'Sunday in the country'. No banned words." },
-            pieces: { type: "array", items: { type: "string" }, description: "The specific items used. Name each by category and brand if known." },
+            item_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "The [ID:...] values from the inventory for items used in this look. List 2-4 item IDs that make up the outfit.",
+            },
+            pieces: { type: "array", items: { type: "string" }, description: "Human-readable description of each piece used. Name each by category and brand if known." },
             styling_note: { type: "string", description: "One sentence on how to wear it. Max 20 words. No banned words." },
           },
-          required: ["title", "pieces", "styling_note"],
+          required: ["title", "item_ids", "pieces", "styling_note"],
           additionalProperties: false,
         },
       },
@@ -46,7 +51,7 @@ Deno.serve(async (req: Request) => {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
     const { data: items } = await supabase
       .from("wardrobe_items")
-      .select("category, brand, tags, reason")
+      .select("id, category, brand, tags, reason")
       .eq("user_id", user.id)
       .eq("status", "analysed")
       .eq("verdict", "keep");
@@ -59,10 +64,10 @@ Deno.serve(async (req: Request) => {
     if (!apiKey) return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const inventory = items.map((it: any) =>
-      `- ${it.category}${it.brand ? ` (${it.brand})` : ""} — tags: ${(it.tags || []).join(", ") || "none"}${it.reason ? ` — ${it.reason}` : ""}`
+      `- [ID:${it.id}] ${it.category}${it.brand ? ` (${it.brand})` : ""} — tags: ${(it.tags || []).join(", ") || "none"}${it.reason ? ` — ${it.reason}` : ""}`
     ).join("\n");
 
-    const systemPrompt = `You are a senior personal stylist. Suggest 2-3 outfit combinations using ONLY items from this client's kept wardrobe. Be specific about which pieces combine and why they work together.
+    const systemPrompt = `You are a senior personal stylist. Suggest 2-3 outfit combinations using ONLY items from this client's wardrobe. Be specific about which pieces combine and why they work together.
 
 CLIENT PROFILE
 Style summary: ${profile?.style_summary || "—"}
@@ -71,10 +76,11 @@ Palette: ${(profile?.colour_palette || []).join(", ") || "—"}
 Proportions: ${profile?.proportions || "—"}
 
 RULES
-- Only use items that appear in the list below. Do not invent items she doesn't own.
+- Only use items that appear in the list below. Do not invent items the client doesn't own.
+- Include the [ID:...] of each item you use in the item_ids field.
 - BANNED WORDS: effortless, chic, elevate, elevated, timeless, versatile, seamless, fashion-forward, curated, polished, sophisticated, must-have, statement piece, capsule.`;
 
-    const userMsg = `Her kept wardrobe:\n\n${inventory}\n\nSuggest 2-3 outfit combinations using only these pieces.`;
+    const userMsg = `Wardrobe:\n\n${inventory}\n\nSuggest 2-3 outfit combinations using only these pieces.`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

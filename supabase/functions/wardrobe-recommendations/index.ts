@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function proportionsNote(p: string): string {
+  if (!p) return "";
+  const low = p.toLowerCase();
+  if (low.includes("legs are notably longer"))
+    return "Legs are a standout feature — recommend cuts that celebrate leg length: higher hemlines, wide-leg trousers, high-rise waistbands.";
+  if (low.includes("torso is notably longer"))
+    return "Torso is notably longer — prioritise high-rise bottoms, cropped proportions, and waist-defining cuts.";
+  if (low.includes("balanced"))
+    return "Proportions are balanced — most silhouettes work.";
+  if (low.includes("broad shoulder"))
+    return "Shoulders are a strong feature — balance with flared or wide-leg bottoms.";
+  if (low.includes("narrower shoulder"))
+    return "Shoulders are narrower than hips — structured shoulders and clean necklines add width.";
+  if (low.includes("don't know") || low.includes("honest"))
+    return "";
+  return `Proportions: ${p}`;
+}
+
 const TOOL = {
   name: "save_recommendations",
   description: "Return three specific buyable wardrobe recommendations for one wardrobe gap.",
@@ -54,6 +72,8 @@ Deno.serve(async (req: Request) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return new Response(JSON.stringify({ error: "Missing API key" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    const propNote = proportionsNote(profile?.proportions || "");
+
     const systemPrompt = `You are a senior personal shopper. Recommend exactly three specific pieces for this wardrobe gap.
 
 CLIENT PROFILE
@@ -62,7 +82,7 @@ Archetypes: ${(profile?.style_archetypes || []).join(", ") || "—"}
 Palette: ${(profile?.colour_palette || []).join(", ") || "—"}
 Avoid: ${(profile?.avoid_list || []).join(", ") || "—"}
 Body notes: ${profile?.body_notes || "—"}
-Proportions: ${profile?.proportions || "—"}
+${propNote ? `Proportions insight: ${propNote}` : ""}
 Budget per piece: €${profile?.budget_ceiling || "—"}
 
 Use real designers or brands, concrete piece names, approximate EUR pricing, and searchable wording. Keep reasons under 18 words.`;
@@ -87,7 +107,6 @@ Use real designers or brands, concrete piece names, approximate EUR pricing, and
     const rawRecs = toolUse?.input?.recommendations;
     if (!Array.isArray(rawRecs)) return new Response(JSON.stringify({ error: "No recommendations returned" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Add affiliate_url field (null until wired to affiliate program)
     const recommendations = rawRecs.map((r: any) => ({
       designer: r.designer,
       piece_name: r.piece_name,
