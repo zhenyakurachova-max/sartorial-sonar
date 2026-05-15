@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
 
+const REDIRECT_TO = `${window.location.origin}/auth/callback`;
+
 function isApproved(email: string): boolean {
   if (APPROVED_EMAILS.length === 0) return true;
   return APPROVED_EMAILS.includes(email.trim().toLowerCase());
@@ -36,11 +38,15 @@ export default function Signup() {
     }
     setBusy(true);
     const { data, error } = await supabase.functions.invoke("send-magic-link", {
-      body: { email: email.trim(), redirectTo: `${window.location.origin}/auth/callback` },
+      body: { email: email.trim(), redirectTo: REDIRECT_TO },
     });
     setBusy(false);
-    if (error || data?.error) setError(copy.signup.errorGeneric);
-    else setSent(true);
+    if (error || data?.error) {
+      const msg = data?.error ?? (error as any)?.message ?? copy.signup.errorGeneric;
+      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } else {
+      setSent(true);
+    }
   };
 
   const signInWithGoogle = async () => {
