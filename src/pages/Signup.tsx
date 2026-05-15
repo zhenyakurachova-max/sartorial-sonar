@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
 
-const REDIRECT_TO = `${window.location.origin}/auth/callback`;
+const REDIRECT_TO = "https://atylier.style/auth/callback";
 
 function isApproved(email: string): boolean {
   if (APPROVED_EMAILS.length === 0) return true;
@@ -37,16 +37,13 @@ export default function Signup() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase.functions.invoke("send-magic-link", {
-      body: { email: email.trim(), redirectTo: REDIRECT_TO },
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: REDIRECT_TO },
     });
     setBusy(false);
-    if (error || data?.error) {
-      const msg = data?.error ?? (error as any)?.message ?? copy.signup.errorGeneric;
-      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
-    } else {
-      setSent(true);
-    }
+    if (error) setError(error.message);
+    else setSent(true);
   };
 
   const signInWithGoogle = async () => {
