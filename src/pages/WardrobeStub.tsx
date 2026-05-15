@@ -457,7 +457,7 @@ export default function WardrobeStub() {
 
           {fileTooLarge ? (
             <div className="mt-6 space-y-4">
-              <p className="text-sm text-destructive">This photo is too large (over 50 MB). Please use a smaller image.</p>
+              <p className="text-sm text-destructive">This photo is too large (over 50 MB). Please use a smaller image under 4 MB.</p>
               <Button variant="outline" onClick={resetAddSheet} className="rounded-sm h-12 w-full">Dismiss</Button>
             </div>
           ) : batchFiles.length > 0 ? (
@@ -519,7 +519,7 @@ export default function WardrobeStub() {
                 <ImageIcon className="h-5 w-5 text-primary" /><span>Choose from gallery</span>
               </button>
               <p className="text-xs text-muted-foreground text-center pt-1">
-                For best results, keep photos under 5 MB.
+                For best results, keep photos under 4 MB.
               </p>
             </div>
           ) : (

@@ -71,9 +71,9 @@ Deno.serve(async (req: Request) => {
     const mediaType = (imageData.type && imageData.type.startsWith("image/")) ? imageData.type : "image/jpeg";
     console.log("Image encoded, size:", base64.length, "type:", mediaType);
 
-    // Reject images over 5 MB before sending to Claude
-    const estimatedRawBytes = Math.floor(base64.length * 0.75);
-    if (estimatedRawBytes > 5 * 1024 * 1024) {
+    // Claude checks the base64 string length directly (limit: 5,242,880 bytes = 5 MB base64,
+    // which is ~3.75 MB of raw image data). Check base64.length, not the decoded size.
+    if (base64.length > 5242880) {
       return new Response(JSON.stringify({ error: "IMAGE_TOO_LARGE" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
