@@ -9,8 +9,6 @@ import { Label } from "@/components/ui/label";
 import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
 
-const REDIRECT_TO = `${window.location.origin}/app/interview`;
-
 function isApproved(email: string): boolean {
   if (APPROVED_EMAILS.length === 0) return true;
   return APPROVED_EMAILS.includes(email.trim().toLowerCase());
@@ -37,12 +35,11 @@ export default function Signup() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: REDIRECT_TO },
+    const { data, error } = await supabase.functions.invoke("send-magic-link", {
+      body: { email: email.trim(), redirectTo: `${window.location.origin}/auth/callback` },
     });
     setBusy(false);
-    if (error) setError(copy.signup.errorGeneric);
+    if (error || data?.error) setError(copy.signup.errorGeneric);
     else setSent(true);
   };
 
