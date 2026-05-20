@@ -78,6 +78,7 @@ export default function WardrobeStub() {
 
   const [staleIds, setStaleIds] = useState<Set<string>>(new Set());
   const [itemMessages, setItemMessages] = useState<Record<string, string>>({});
+  const [tipDismissed, setTipDismissed] = useState(() => sessionStorage.getItem("photo_tip_dismissed") === "1");
   const pendingSince = useRef<Record<string, number>>({});
 
   // Load items + one-time stuck-item cleanup
@@ -510,6 +511,20 @@ export default function WardrobeStub() {
             </div>
           ) : !pendingPreview ? (
             <div className="mt-6 space-y-3">
+              {!tipDismissed && (
+                <div className="flex items-start gap-3 bg-muted rounded-sm px-4 py-3">
+                  <p className="flex-1 text-xs text-muted-foreground leading-relaxed">
+                    <span className="font-medium text-foreground">For best results:</span> photograph each item separately, lay flat or hang it, use natural light, and make sure the whole item is visible.
+                  </p>
+                  <button
+                    onClick={() => { sessionStorage.setItem("photo_tip_dismissed", "1"); setTipDismissed(true); }}
+                    aria-label="Dismiss tip"
+                    className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground transition"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
               <button onClick={() => onPick("camera")}
                 className="w-full flex items-center gap-3 px-4 py-4 border border-border rounded-sm text-left hover:bg-muted transition">
                 <Camera className="h-5 w-5 text-primary" /><span>Take a photo</span>
