@@ -83,6 +83,10 @@ Deno.serve(async (req: Request) => {
     const propNote = proportionsNote(profile?.proportions || "");
     const sym = currencySymbol(profile?.currency);
 
+    const styleIconsLine = profile?.style_icons && !profile.style_icons.includes("Nobody comes to mind")
+      ? `Style icons the client admires: ${profile.style_icons}`
+      : "";
+
     const systemPrompt = `You are a senior personal shopper. Recommend exactly three specific pieces for this wardrobe gap.
 
 CLIENT PROFILE
@@ -94,6 +98,7 @@ Body notes: ${profile?.body_notes || "—"}
 ${propNote ? `Proportions insight: ${propNote}` : ""}
 Budget per piece: ${sym}${profile?.budget_ceiling || "—"}
 ${profile?.style_rules ? `Hard constraints — cuts/styles that do not work for the client: ${profile.style_rules}` : ""}
+${styleIconsLine}
 
 Use real designers or brands, concrete piece names, and approximate pricing in ${sym === "€" ? "EUR (€)" : sym === "£" ? "GBP (£)" : sym === "$" ? "USD ($)" : "AED"}. Keep reasons under 18 words.`;
 

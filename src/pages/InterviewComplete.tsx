@@ -7,7 +7,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { copy } from "@/lib/copy";
 import { getCurrencySymbol } from "@/lib/interview-questions";
 
-const INTERVIEW_TOTAL = 13;
+const INTERVIEW_TOTAL = 14;
 
 type Profile = {
   style_summary: string | null;
@@ -78,6 +78,8 @@ export default function InterviewComplete() {
       // Extract verbatim fields from raw answers (not synthesised by AI)
       const currencyAns = history.find((h) => h.question_index === 0)?.answer ?? null;
       const styleRulesAns = history.find((h) => h.question_index === 8)?.answer ?? null;
+      const styleIconsRaw = history.find((h) => h.question_index === 13)?.answer ?? null;
+      const styleIconsAns = styleIconsRaw === "Nobody comes to mind" ? null : styleIconsRaw;
 
       const p = data.profile;
       const { error: upErr } = await supabase
@@ -92,6 +94,7 @@ export default function InterviewComplete() {
           budget_ceiling: p.budget_ceiling ?? null,
           currency: currencyAns,
           style_rules: styleRulesAns,
+          style_icons: styleIconsAns,
           interview_complete: true,
         })
         .eq("id", user.id);
@@ -146,6 +149,7 @@ export default function InterviewComplete() {
         budget_ceiling: null,
         currency: null,
         style_rules: null,
+        style_icons: null,
         interview_complete: false,
       })
       .eq("id", user.id);

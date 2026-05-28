@@ -17,7 +17,7 @@ import {
   type Question,
 } from "@/lib/interview-questions";
 
-const TOTAL = 13;
+const TOTAL = 14;
 
 function detectCurrency(): string {
   try {
@@ -309,6 +309,8 @@ export default function Interview() {
               {currentOpen.chips.options.map((opt) => {
                 const selected = openChipSelected.includes(opt);
                 const max = currentOpen.chips!.maxSelect;
+                const exclusiveOptions = currentOpen.chips!.exclusiveOptions ?? [];
+                const isExclusive = exclusiveOptions.includes(opt);
                 const totalSelected = openChipSelected.length;
                 const atLimit =
                   currentOpen.chips!.select === "multi" && !!max && totalSelected >= max;
@@ -326,7 +328,8 @@ export default function Interview() {
                         setOpenChipSelected((prev) => {
                           if (selected) return prev.filter((v) => v !== opt);
                           if (max && prev.length >= max) return prev;
-                          return [...prev, opt];
+                          if (isExclusive) return [opt];
+                          return [...prev.filter((v) => !exclusiveOptions.includes(v)), opt];
                         });
                       }
                     }}
@@ -336,12 +339,13 @@ export default function Interview() {
               {currentOpen.chips.allowOther && (() => {
                 const isSel = openChipSelected.includes("__other__");
                 const max = currentOpen.chips!.maxSelect;
+                const exclusiveOptions = currentOpen.chips!.exclusiveOptions ?? [];
                 const atLimit =
                   currentOpen.chips!.select === "multi" && !!max && openChipSelected.length >= max;
                 const disabled = !isSel && atLimit;
                 return (
                   <PillChip
-                    label="Other (type your own)"
+                    label={currentOpen.chips!.otherLabel ?? "Other (type your own)"}
                     selected={isSel}
                     disabled={disabled}
                     onClick={() => {
@@ -351,7 +355,7 @@ export default function Interview() {
                         setOpenChipSelected((prev) => {
                           if (isSel) return prev.filter((v) => v !== "__other__");
                           if (max && prev.length >= max) return prev;
-                          return [...prev, "__other__"];
+                          return [...prev.filter((v) => !exclusiveOptions.includes(v)), "__other__"];
                         });
                       }
                     }}

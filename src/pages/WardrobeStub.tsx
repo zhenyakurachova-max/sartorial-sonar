@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, X, Camera, Image as ImageIcon, Loader2 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Plus, X, Camera, Image as ImageIcon, Loader2, Lock, Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -53,11 +54,17 @@ const analysisTimeout = () =>
     window.setTimeout(() => reject(new Error("Analysis timed out after 30 seconds.")), ANALYSIS_TIMEOUT_MS);
   });
 
+const FREE_ANALYSIS_LIMIT = 10;
+
 export default function WardrobeStub() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [paid, setPaid] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
@@ -81,18 +88,35 @@ export default function WardrobeStub() {
   const [tipDismissed, setTipDismissed] = useState(() => sessionStorage.getItem("photo_tip_dismissed") === "1");
   const pendingSince = useRef<Record<string, number>>({});
 
+  // Detect payment success redirect
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("payment") !== "success") return;
+    toast({ title: "Your full audit is unlocked." });
+    setPaid(true);
+    setProfileLoaded(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("payment");
+    window.history.replaceState({}, "", url.toString());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load items + one-time stuck-item cleanup
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("wardrobe_items")
-        .select(ITEM_SELECT)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      const [{ data, error }, { data: profileData }] = await Promise.all([
+        supabase
+          .from("wardrobe_items")
+          .select(ITEM_SELECT)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase.from("profiles").select("paid").eq("id", user.id).maybeSingle(),
+      ]);
       if (cancelled) return;
       if (error) console.error("[wardrobe] load", error);
+      setPaid((profileData as any)?.paid ?? false);
+      setProfileLoaded(true);
 
       const allItems = (data ?? []) as Item[];
 
@@ -290,6 +314,36 @@ export default function WardrobeStub() {
     setDetailItem((current) => (current?.id === itemId ? { ...current, brand: trimmed } : current));
   };
 
+  const onCategoryChange = async (itemId: string, category: Category) => {
+    await supabase
+      .from("wardrobe_items")
+      .update({ category, status: "pending", verdict: null, reason: null, tags: [] })
+      .eq("id", itemId);
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId ? { ...it, category, status: "pending", verdict: null, reason: null, tags: [] } : it,
+      ),
+    );
+    setDetailItem((current) =>
+      current?.id === itemId
+        ? { ...current, category, status: "pending", verdict: null, reason: null, tags: [] }
+        : current,
+    );
+    runAnalysis(itemId);
+  };
+
+  const handleUnlock = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+    });
+    if (error || !data?.url) {
+      toast({ title: "Couldn't start checkout", description: "Please try again in a moment." });
+      return;
+    }
+    window.location.href = data.url;
+  };
+
   const uploadFile = async (file: File, category: Category): Promise<Item> => {
     const mimeType = file.type || "image/jpeg";
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
@@ -363,6 +417,8 @@ export default function WardrobeStub() {
 
   const hasItems = items.length > 0;
   const atCap = items.length >= ITEM_CAP;
+  const analysedCount = items.filter((it) => it.status === "analysed").length;
+  const showPaywall = profileLoaded && !paid && analysedCount >= FREE_ANALYSIS_LIMIT;
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
@@ -564,6 +620,30 @@ export default function WardrobeStub() {
         </SheetContent>
       </Sheet>
 
+      {/* Paywall overlay */}
+      {showPaywall && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-background/80 backdrop-blur-sm">
+          <div className="w-full max-w-md mx-auto p-6 pb-10 bg-background border border-border rounded-t-2xl shadow-lg">
+            <div className="flex items-center gap-2 mb-4">
+              <Lock className="h-5 w-5 text-primary" />
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Full audit</span>
+            </div>
+            <h2 className="font-serif text-2xl leading-snug">
+              You've audited {FREE_ANALYSIS_LIMIT} pieces free.
+            </h2>
+            <p className="mt-2 text-muted-foreground">
+              Unlock your full wardrobe audit — one-time €29.
+            </p>
+            <Button onClick={handleUnlock} className="mt-6 h-12 w-full rounded-sm">
+              Unlock now — €29
+            </Button>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              One payment. No subscription.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Item detail drawer */}
       <Sheet open={!!detailItem} onOpenChange={(o) => !o && setDetailItem(null)}>
         <SheetContent side="bottom" className="rounded-t-xl bg-background border-border p-0 max-h-[92vh] overflow-y-auto">
@@ -575,6 +655,7 @@ export default function WardrobeStub() {
               onRetry={() => { onRetry(detailItem.id); setDetailItem(null); }}
               onDelete={() => onDelete(detailItem.id)}
               onBrandChange={(brand) => onBrandChange(detailItem.id, brand)}
+              onCategoryChange={(category) => onCategoryChange(detailItem.id, category)}
               failMessage={itemMessages[detailItem.id]}
             />
           )}
@@ -644,11 +725,20 @@ function VerdictPill({ verdict, large = false }: { verdict: Verdict; large?: boo
   );
 }
 
-function ItemDetail({ item, src, onClose, onRetry, onDelete, onBrandChange, failMessage }: {
+function ItemDetail({ item, src, onClose, onRetry, onDelete, onBrandChange, onCategoryChange, failMessage }: {
   item: Item; src?: string; onClose: () => void; onRetry: () => void; onDelete: () => void;
-  onBrandChange: (brand: string) => void; failMessage?: string;
+  onBrandChange: (brand: string) => void;
+  onCategoryChange: (category: Category) => void;
+  failMessage?: string;
 }) {
   const [styleOpen, setStyleOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(false);
+
+  const handleCategorySelect = (cat: Category) => {
+    setEditingCategory(false);
+    onCategoryChange(cat);
+  };
+
   return (
     <div>
       {/* Photo — max 60vh, not full-screen */}
@@ -662,7 +752,17 @@ function ItemDetail({ item, src, onClose, onRetry, onDelete, onBrandChange, fail
 
       <div className="px-6 py-5 space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">{item.category}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">{item.category}</p>
+            <button
+              type="button"
+              onClick={() => setEditingCategory((v) => !v)}
+              aria-label="Edit category"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          </div>
           {item.status === "analysed" && item.verdict && <VerdictPill verdict={item.verdict} large />}
           {item.status === "pending" && (
             <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
@@ -676,6 +776,26 @@ function ItemDetail({ item, src, onClose, onRetry, onDelete, onBrandChange, fail
             </button>
           )}
         </div>
+
+        {editingCategory && (
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => handleCategorySelect(c)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs border transition",
+                  item.category === c
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-foreground border-border hover:border-primary/40",
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Brand field */}
         <div className="space-y-1">

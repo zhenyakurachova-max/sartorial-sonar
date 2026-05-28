@@ -21,8 +21,10 @@ export type OpenQuestion = {
     select: "single" | "multi";
     options: string[];
     allowOther?: boolean;
+    otherLabel?: string;
     maxSelect?: number;
     helperText?: string;
+    exclusiveOptions?: string[];
   };
 };
 
@@ -135,7 +137,7 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
       select: "multi",
       maxSelect: 2,
       helperText: "Pick up to 2",
-      options: ["Classic", "Minimal", "Elegant", "Romantic", "Edgy", "Relaxed", "Creative", "Not sure"],
+      options: ["Classic", "Minimal", "Elegant", "Relaxed", "Creative", "Casual", "Sporty", "Luxury", "Not sure"],
       allowOther: false,
     },
   },
@@ -180,6 +182,18 @@ export const FIXED_OPEN_QUESTIONS: OpenQuestion[] = [
         "Easy",
       ],
       allowOther: true,
+    },
+  },
+  // Q13 — Style icons (optional, saved verbatim)
+  {
+    kind: "open",
+    prompt: "Is there anyone whose style you admire?",
+    chips: {
+      select: "multi",
+      options: ["Cate Blanchett", "Jeanne Damas", "Zendaya", "Olivia Palermo", "Nobody comes to mind"],
+      allowOther: true,
+      otherLabel: "Someone else (type their name)",
+      exclusiveOptions: ["Nobody comes to mind"],
     },
   },
 ];

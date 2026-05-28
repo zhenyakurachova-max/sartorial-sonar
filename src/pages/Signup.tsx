@@ -94,7 +94,26 @@ export default function Signup() {
               <h1 className="font-serif text-3xl text-balance">{copy.signup.heading}</h1>
               <p className="mt-3 text-muted-foreground">{copy.signup.sub}</p>
 
-              <form onSubmit={sendMagicLink} className="mt-10 space-y-4">
+              <div className="mt-10">
+                <Button
+                  type="button"
+                  onClick={signInWithGoogle}
+                  className="w-full h-12 rounded-sm"
+                >
+                  {copy.signup.google}
+                </Button>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  One tap — no inbox checking needed.
+                </p>
+              </div>
+
+              <div className="my-8 flex items-center gap-3 text-xs uppercase tracking-wider text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                or sign in with email
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              <form onSubmit={sendMagicLink} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground">
                     Email
@@ -112,27 +131,13 @@ export default function Signup() {
                 </div>
                 <Button
                   type="submit"
+                  variant="outline"
                   disabled={busy || !email}
-                  className="w-full h-12 rounded-sm"
+                  className="w-full h-12 rounded-sm border-foreground/20"
                 >
                   {busy ? copy.signup.sending : copy.signup.sendLink}
                 </Button>
               </form>
-
-              <div className="my-8 flex items-center gap-3 text-xs uppercase tracking-wider text-muted-foreground">
-                <div className="h-px flex-1 bg-border" />
-                {copy.signup.or}
-                <div className="h-px flex-1 bg-border" />
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={signInWithGoogle}
-                className="w-full h-12 rounded-sm border-foreground/20"
-              >
-                {copy.signup.google}
-              </Button>
 
               {error && (
                 <p className="mt-6 text-sm text-destructive">{error}</p>
